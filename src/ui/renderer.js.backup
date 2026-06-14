@@ -1,0 +1,1136 @@
+﻿const { ipcRenderer } = require('electron');
+
+let currentConfig = {
+  username: 'Player',
+  memory: 2048,
+  lastVersion: null,
+  optimizationProfile: 'balanced',
+  selectedGPU: 0,
+  launcherBehavior: 'hide'
+};
+
+let availableVersions = [];
+let installedVersions = [];
+let allVersionsData = {
+  vanilla: [],
+  forge: [],
+  fabric: [],
+  optifine: []
+};
+let currentFilter = 'vanilla';
+let runningInstances = [];
+let isolatedVersions = new Set();
+let systemInfo = null;
+let autoSaveTimeout = null; // Track which versions are isolated
+
+// Initialize
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadConfig();
+  await loadSystemMemory();
+  await loadSystemInfo();
+  await loadVersions();
+  await loadRunningInstances();
+  await loadIsolationSettings();
+  setupEventListeners();
+  updateUI();
+
+  // Poll for running instances every 5 seconds
+  setInterval(async () => {
+    await loadRunningInstances();
+  }, 5000);
+});
+
+// Load system info
+async function loadSystemInfo() {
+  try {
+    systemInfo = await ipcRenderer.invoke('get-system-info');
+    displaySystemInfo();
+    displayGPUSelection();
+  } catch (error) {
+    console.error('Error loading system info:', error);
+  }
+}
+
+// Display system info
+function displaySystemInfo() {
+  const container = document.getElementById('systemInfo');
+
+  if (!systemInfo) {
+    container.innerHTML = '<div class="system-info-loading">Ошибка загрузки</div>';
+    return;
+  }
+
+  // Format Windows version
+  let osName = 'Windows';
+  if (systemInfo.platform === 'win32') {
+    osName = 'Windows';
+  } else if (systemInfo.platform === 'darwin') {
+    osName = 'macOS';
+  } else if (systemInfo.platform === 'linux') {
+    osName = 'Linux';
+  }
+
+  const architecture = systemInfo.arch === 'x64' ? '64-bit' : systemInfo.arch;
+
+  // Format CPU name (remove extra info)
+  let cpuName = systemInfo.cpu.replace(/\s+/g, ' ').trim();
+  cpuName = cpuName.replace(/@.*/, '').trim(); // Remove frequency
+  cpuName = cpuName.replace(/CPU /, '').trim();
+
+  container.innerHTML = `
+    <div class="system-info-item">
+      <div class="system-info-label">💻 Процессор</div>
+      <div class="system-info-value">${cpuName}</div>
+    </div>
+    <div class="system-info-item">
+      <div class="system-info-label">⚡ Ядра / Потоки</div>
+      <div class="system-info-value">${systemInfo.cpuCores} потоков</div>
+    </div>
+    <div class="system-info-item">
+      <div class="system-info-label">🎮 Оперативная память</div>
+      <div class="system-info-value">${systemInfo.totalMemoryGB} GB RAM</div>
+    </div>
+    <div class="system-info-item">
+      <div class="system-info-label">🖥️ Операционная система</div>
+      <div class="system-info-value">${osName} ${architecture}</div>
+    </div>
+  `;
+}
+
+// Display GPU selection
+function displayGPUSelection() {
+  const container = document.getElementById('gpuSelection');
+
+  if (!systemInfo || !systemInfo.gpus || systemInfo.gpus.length === 0) {
+    container.innerHTML = ‘<div class="system-info-loading">Видеокарты не обнаружены</div>’;
+    return;
+  }
+
+  container.innerHTML = '';
+
+  systemInfo.gpus.forEach((gpu, index) => {
+    const option = document.createElement('div');
+    option.className = 'gpu-option';
+    if (index === (currentConfig.selectedGPU || 0)) {
+      option.classList.add('active');
+    }
+
+    const isIntegrated = gpu.toLowerCase().includes('intel') &&
+                        (gpu.toLowerCase().includes('uhd') ||
+                         gpu.toLowerCase().includes('hd graphics') ||
+                         gpu.toLowerCase().includes('iris'));
+
+    option.innerHTML = `
+      <div class="gpu-radio"></div>
+      <div class="gpu-info">
+        <div class="gpu-name">${gpu}</div>
+        <div class=”gpu-type”>${isIntegrated ? ‘Встроенная графика’ : ‘Дискретная видеокарта’}</div>
+      </div>
+    `;
+
+    option.addEventListener('click', () => {
+      document.querySelectorAll('.gpu-option').forEach(opt => opt.classList.remove('active'));
+      option.classList.add('active');
+      currentConfig.selectedGPU = index;
+    });
+
+    container.appendChild(option);
+  });
+}
+
+// Load system memory info
+async function loadSystemMemory() {
+  try {
+    const memInfo = await ipcRenderer.invoke('get-system-memory');
+
+    // Update slider max value
+    const memorySlider = document.getElementById('memorySlider');
+    const memoryInput = document.getElementById('memoryInput');
+
+    memorySlider.max = memInfo.maxAllocation;
+    memoryInput.max = memInfo.maxAllocation;
+
+    // Set recommended value if current config is default or exceeds max
+    if (currentConfig.memory === 2048 || currentConfig.memory > memInfo.maxAllocation) {
+      currentConfig.memory = memInfo.recommendedAllocation;
+      memorySlider.value = memInfo.recommendedAllocation;
+      memoryInput.value = memInfo.recommendedAllocation;
+    }
+
+    // Update description with system info
+    const memoryLabel = document.querySelector('label[for="memoryInput"] .setting-description');
+    if (memoryLabel) {
+      memoryLabel.textContent = `Р”РѕСЃС‚СѓРїРЅРѕ: ${Math.floor(memInfo.totalMemoryMB / 1024)} GB | Р РµРєРѕРјРµРЅРґСѓРµС‚СЃСЏ: ${memInfo.recommendedAllocation} MB`;
+    }
+  } catch (error) {
+    console.error('Error loading system memory:', error);
+  }
+}
+
+// Load isolation settings
+async function loadIsolationSettings() {
+  try {
+    const settings = await ipcRenderer.invoke('get-isolation-settings');
+    if (settings) {
+      isolatedVersions = new Set(settings);
+    }
+  } catch (error) {
+    console.error('Error loading isolation settings:', error);
+  }
+}
+
+// Save isolation settings
+async function saveIsolationSettings() {
+  try {
+    await ipcRenderer.invoke('save-isolation-settings', Array.from(isolatedVersions));
+  } catch (error) {
+    console.error('Error saving isolation settings:', error);
+  }
+}
+
+// Auto-save config with debounce
+function autoSaveConfig() {
+  if (autoSaveTimeout) {
+    clearTimeout(autoSaveTimeout);
+  }
+  autoSaveTimeout = setTimeout(async () => {
+    try {
+      await ipcRenderer.invoke('save-config', currentConfig);
+      await saveIsolationSettings();
+      console.log('Auto-saved config');
+    } catch (error) {
+      console.error('Auto-save error:', error);
+    }
+  }, 1000);
+}
+
+// Load config
+async function loadConfig() {
+  try {
+    currentConfig = await ipcRenderer.invoke('get-config');
+  } catch (error) {
+    console.error('Error loading config:', error);
+  }
+}
+
+// Load running instances
+async function loadRunningInstances() {
+  try {
+    runningInstances = await ipcRenderer.invoke('get-running-instances');
+    updateRunningInstancesUI();
+  } catch (error) {
+    console.error('Error loading instances:', error);
+  }
+}
+
+// Update running instances UI
+function updateRunningInstancesUI() {
+  const container = document.getElementById('runningInstances');
+  const list = document.getElementById('instancesList');
+
+  if (runningInstances.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'flex';
+  list.innerHTML = '';
+
+  runningInstances.forEach(instance => {
+    const item = document.createElement('div');
+    item.className = 'instance-item';
+    item.innerHTML = `
+      <div class="instance-info">
+        <div class="instance-status"></div>
+        <div>
+          <span class="instance-name">${instance.version}</span>
+          <span class="instance-pid">PID: ${instance.pid}</span>
+        </div>
+      </div>
+      <button class="kill-instance-btn" data-instance-id="${instance.id}">Закрыть</button>
+    `;
+
+    const killBtn = item.querySelector('.kill-instance-btn');
+    killBtn.addEventListener('click', async () => {
+      await killInstance(instance.id);
+    });
+
+    list.appendChild(item);
+  });
+}
+
+// Kill instance
+async function killInstance(instanceId) {
+  try {
+    const result = await ipcRenderer.invoke('kill-instance', instanceId);
+    if (result.success) {
+      await loadRunningInstances();
+      showNotification('Процесс завершен', 'success');
+    } else {
+      showNotification('РћС€РёР±РєР° Р·Р°РІРµСЂС€РµРЅРёСЏ РїСЂРѕС†РµСЃСЃР°', 'error');
+    }
+  } catch (error) {
+    console.error('Error killing instance:', error);
+    showNotification('РћС€РёР±РєР° Р·Р°РІРµСЂС€РµРЅРёСЏ РїСЂРѕС†РµСЃСЃР°', 'error');
+  }
+}
+
+// Load versions
+async function loadVersions() {
+  try {
+    installedVersions = await ipcRenderer.invoke('get-installed-versions');
+    allVersionsData = await ipcRenderer.invoke('get-all-versions');
+
+    // Default to vanilla
+    availableVersions = allVersionsData.vanilla || [];
+
+    populateVersionSelect();
+    populateVersionsList();
+  } catch (error) {
+    console.error('Error loading versions:', error);
+  }
+}
+
+// Populate version select
+function populateVersionSelect() {
+  const versionSelect = document.getElementById('versionSelect');
+  versionSelect.innerHTML = '';
+
+  if (installedVersions.length === 0) {
+    versionSelect.innerHTML = '<option value="">РќРµС‚ СѓСЃС‚Р°РЅРѕРІР»РµРЅРЅС‹С… РІРµСЂСЃРёР№</option>';
+    return;
+  }
+
+  installedVersions.forEach(version => {
+    const option = document.createElement('option');
+    option.value = version;
+    option.textContent = `Minecraft ${version}`;
+    if (version === currentConfig.lastVersion) {
+      option.selected = true;
+    }
+    versionSelect.appendChild(option);
+  });
+
+  if (!currentConfig.lastVersion && installedVersions.length > 0) {
+    versionSelect.value = installedVersions[0];
+  }
+}
+
+// Populate versions list
+function populateVersionsList() {
+  const versionsList = document.getElementById('versionsList');
+  versionsList.innerHTML = '';
+
+  if (!availableVersions || availableVersions.length === 0) {
+    versionsList.innerHTML = '<div class="loading-spinner">РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… РІРµСЂСЃРёР№</div>';
+    return;
+  }
+
+  // Show versions based on current filter
+  const displayVersions = currentFilter === 'vanilla'
+    ? availableVersions.filter(v => v.type === 'release') // Only releases for vanilla
+    : availableVersions; // All for modloaders
+
+  if (displayVersions.length === 0) {
+    versionsList.innerHTML = '<div class="loading-spinner">РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… РІРµСЂСЃРёР№</div>';
+    return;
+  }
+
+  displayVersions.forEach(version => {
+    const card = document.createElement('div');
+    card.className = 'version-card';
+
+    // Determine loader type
+    const loaderType = version.loader || 'vanilla';
+    card.setAttribute('data-version-type', loaderType);
+
+    const isInstalled = installedVersions.includes(version.id);
+    if (isInstalled) {
+      card.classList.add('installed');
+    }
+
+    // Format version name
+    let versionName = version.id;
+    let versionBadge = loaderType;
+
+    if (version.mcVersion) {
+      versionName = `${version.mcVersion}`;
+      if (loaderType === 'forge') {
+        versionBadge = `Forge ${version.forgeVersion}`;
+      } else if (loaderType === 'neoforge') {
+        versionBadge = `NeoForge ${version.neoforgeVersion}`;
+      } else if (loaderType === 'fabric') {
+        versionBadge = `Fabric ${version.fabricVersion}`;
+      } else if (loaderType === 'quilt') {
+        versionBadge = `Quilt ${version.quiltVersion}`;
+      } else if (loaderType === 'optifine') {
+        versionBadge = `OptiFine ${version.optifineVersion}`;
+      }
+    }
+
+    card.innerHTML = `
+      <div class="version-name">${versionName}</div>
+      <div class="version-type ${loaderType}">${versionBadge}</div>
+      ${isInstalled ? '<div class="version-status">вњ“ РЈСЃС‚Р°РЅРѕРІР»РµРЅРѕ</div>' : '<div class="version-status">РќР°Р¶РјРёС‚Рµ РґР»СЏ СѓСЃС‚Р°РЅРѕРІРєРё</div>'}
+      <div class="version-loader hidden">
+        <div class="loader-spinner"></div>
+        <span>Р—Р°РіСЂСѓР·РєР°...</span>
+      </div>
+      ${isInstalled ? '<button class="delete-version-btn" data-version="' + version.id + '">РЈРґР°Р»РёС‚СЊ</button>' : ''}
+    `;
+
+    if (!isInstalled) {
+      card.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Show loading state
+        const loader = card.querySelector('.version-loader');
+        const status = card.querySelector('.version-status');
+        status.classList.add('hidden');
+        loader.classList.remove('hidden');
+        card.style.pointerEvents = 'none';
+
+        console.log('Downloading version:', version.id);
+        await downloadVersion(version.id);
+
+        // Switch to play tab after download
+        setTimeout(() => {
+          switchTab('play');
+        }, 1000);
+      });
+    } else {
+      // Add delete button handler
+      const deleteBtn = card.querySelector('.delete-version-btn');
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          await deleteVersion(version.id);
+        });
+      }
+    }
+
+    versionsList.appendChild(card);
+  });
+
+  console.log('Versions list populated:', displayVersions.length, 'versions');
+}
+
+// Download version
+async function downloadVersion(versionId) {
+  const progressContainer = document.getElementById('downloadProgress');
+  const progressStage = document.getElementById('progressStage');
+  const progressPercent = document.getElementById('progressPercent');
+  const progressFill = document.getElementById('progressFill');
+  const playBtn = document.getElementById('playBtn');
+
+  progressContainer.classList.remove('hidden');
+  playBtn.disabled = true;
+
+  ipcRenderer.on('download-progress', (event, progress) => {
+    progressStage.textContent = progress.stage;
+    progressPercent.textContent = `${Math.round(progress.progress)}%`;
+    progressFill.style.width = `${progress.progress}%`;
+  });
+
+  try {
+    const result = await ipcRenderer.invoke('download-version', versionId);
+
+    if (result.success) {
+      progressStage.textContent = 'Р—Р°РіСЂСѓР·РєР° Р·Р°РІРµСЂС€РµРЅР°!';
+      progressPercent.textContent = '100%';
+      progressFill.style.width = '100%';
+
+      setTimeout(async () => {
+        progressContainer.classList.add('hidden');
+        await loadVersions();
+        playBtn.disabled = false;
+      }, 2000);
+    } else {
+      alert(`РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё: ${result.error}`);
+      progressContainer.classList.add('hidden');
+      playBtn.disabled = false;
+    }
+  } catch (error) {
+    console.error('Download error:', error);
+    alert('РћС€РёР±РєР° РїСЂРё Р·Р°РіСЂСѓР·РєРµ РІРµСЂСЃРёРё');
+    progressContainer.classList.add('hidden');
+    playBtn.disabled = false;
+  }
+}
+
+// Setup event listeners
+function setupEventListeners() {
+  // Window controls
+  document.getElementById('minimizeBtn').addEventListener('click', () => {
+    ipcRenderer.invoke('minimize-window');
+  });
+
+  document.getElementById('closeBtn').addEventListener('click', () => {
+    ipcRenderer.invoke('close-window');
+  });
+
+  // Tabs
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabName = btn.getAttribute('data-tab');
+      switchTab(tabName);
+    });
+  });
+
+  // Play button
+  document.getElementById('playBtn').addEventListener('click', async () => {
+    await launchGame();
+  });
+
+  // Settings
+  const memorySlider = document.getElementById('memorySlider');
+  const memoryInput = document.getElementById('memoryInput');
+
+  memorySlider.addEventListener('input', (e) => {
+    memoryInput.value = e.target.value;
+    currentConfig.memory = parseInt(e.target.value);
+    autoSaveConfig();
+  });
+
+  memoryInput.addEventListener('input', (e) => {
+    memorySlider.value = e.target.value;
+    currentConfig.memory = parseInt(e.target.value);
+    autoSaveConfig();
+  });
+
+  // Username auto-save
+  document.getElementById('usernameInput').addEventListener('input', (e) => {
+    currentConfig.username = e.target.value.trim();
+    autoSaveConfig();
+  });
+
+  // Launcher behavior
+  document.querySelectorAll('.behavior-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.behavior-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentConfig.launcherBehavior = btn.getAttribute('data-behavior');
+      autoSaveConfig();
+    });
+  });
+
+  document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
+    await saveSettings();
+  });
+
+  // Open instance folder
+  document.getElementById('openInstanceBtn').addEventListener('click', async () => {
+    const versionSelect = document.getElementById('versionSelect');
+    const selectedVersion = versionSelect.value;
+    if (selectedVersion) {
+      await ipcRenderer.invoke('open-instance-folder', selectedVersion);
+    }
+  });
+
+  // Isolation toggle
+  document.getElementById('isolationBtn').addEventListener('click', async () => {
+    const versionSelect = document.getElementById('versionSelect');
+    const selectedVersion = versionSelect.value;
+
+    if (!selectedVersion) {
+      showNotification('Р’С‹Р±РµСЂРёС‚Рµ РІРµСЂСЃРёСЋ', 'error');
+      return;
+    }
+
+    const wasIsolated = isolatedVersions.has(selectedVersion);
+    const willBeIsolated = !wasIsolated;
+
+    // Migrate files between shared and isolated
+    try {
+      const result = await ipcRenderer.invoke('toggle-isolation', {
+        version: selectedVersion,
+        isolated: willBeIsolated
+      });
+
+      if (result.success) {
+        if (willBeIsolated) {
+          isolatedVersions.add(selectedVersion);
+          showNotification('РР·РѕР»СЏС†РёСЏ РІРєР»СЋС‡РµРЅР° - С„Р°Р№Р»С‹ РїРµСЂРµРЅРµСЃРµРЅС‹ РІ РѕС‚РґРµР»СЊРЅСѓСЋ РїР°РїРєСѓ', 'success');
+        } else {
+          isolatedVersions.delete(selectedVersion);
+          showNotification('РР·РѕР»СЏС†РёСЏ РѕС‚РєР»СЋС‡РµРЅР° - С„Р°Р№Р»С‹ РїРµСЂРµРЅРµСЃРµРЅС‹ РІ РѕР±С‰СѓСЋ РїР°РїРєСѓ', 'info');
+        }
+
+        saveIsolationSettings();
+        updateIsolationUI();
+      } else {
+        showNotification(`РћС€РёР±РєР°: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Toggle isolation error:', error);
+      showNotification('РћС€РёР±РєР° РїРµСЂРµРєР»СЋС‡РµРЅРёСЏ РёР·РѕР»СЏС†РёРё', 'error');
+    }
+  });
+
+  // Version select change
+  document.getElementById('versionSelect').addEventListener('change', () => {
+    updateIsolationUI();
+  });
+
+  // Optimization profile
+  document.querySelectorAll('.optimization-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.optimization-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentConfig.optimizationProfile = btn.getAttribute('data-profile');
+      autoSaveConfig();
+    });
+  });
+
+  // Skin upload
+  document.getElementById('uploadSkinBtn').addEventListener('click', () => {
+    document.getElementById('skinInput').click();
+  });
+
+  document.getElementById('skinInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      await uploadSkin(file);
+    }
+  });
+
+  document.getElementById('removeSkinBtn').addEventListener('click', async () => {
+    await removeSkin();
+  });
+
+  // Version search
+  document.getElementById('versionSearch').addEventListener('input', (e) => {
+    filterVersions(e.target.value);
+  });
+
+  // Version filters
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      const filter = btn.getAttribute('data-filter');
+      filterByType(filter);
+    });
+  });
+
+  // Open folder buttons
+  document.querySelectorAll('.open-folder-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const folder = btn.getAttribute('data-folder');
+      ipcRenderer.invoke('open-folder', folder);
+    });
+  });
+}
+
+// Filter by type
+function filterByType(type) {
+  currentFilter = type;
+
+  // Update available versions based on filter
+  if (type === 'vanilla') {
+    availableVersions = allVersionsData.vanilla || [];
+  } else if (type === 'forge') {
+    availableVersions = allVersionsData.forge || [];
+  } else if (type === 'neoforge') {
+    availableVersions = allVersionsData.neoforge || [];
+  } else if (type === 'fabric') {
+    availableVersions = allVersionsData.fabric || [];
+  } else if (type === 'quilt') {
+    availableVersions = allVersionsData.quilt || [];
+  } else if (type === 'optifine') {
+    availableVersions = allVersionsData.optifine || [];
+  } else if (type === 'all') {
+    availableVersions = [
+      ...(allVersionsData.vanilla || []),
+      ...(allVersionsData.forge || []),
+      ...(allVersionsData.neoforge || []),
+      ...(allVersionsData.fabric || []),
+      ...(allVersionsData.quilt || []),
+      ...(allVersionsData.optifine || [])
+    ];
+  }
+
+  populateVersionsList();
+}
+
+// Load files info
+async function loadFilesInfo() {
+  try {
+    const files = await ipcRenderer.invoke('get-minecraft-files');
+
+    // Worlds
+    const worldsList = document.getElementById('worldsList');
+    if (files.worlds && files.worlds.length > 0) {
+      worldsList.innerHTML = files.worlds.map(world => `
+        <div class="file-item">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M3 2H13V14H3V2Z"/>
+          </svg>
+          <span>${world}</span>
+        </div>
+      `).join('');
+    } else {
+      worldsList.innerHTML = '<div class="empty-state">РњРёСЂРѕРІ РЅРµС‚</div>';
+    }
+
+    // Mods
+    const modsList = document.getElementById('modsList');
+    if (files.mods && files.mods.length > 0) {
+      modsList.innerHTML = files.mods.map(mod => `
+        <div class="file-item">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M3 2H13V14H3V2Z"/>
+          </svg>
+          <span>${mod}</span>
+        </div>
+      `).join('');
+    } else {
+      modsList.innerHTML = '<div class="empty-state">РњРѕРґС‹ РЅРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅС‹</div>';
+    }
+
+    // Screenshots
+    const screenshotsList = document.getElementById('screenshotsList');
+    if (files.screenshots && files.screenshots.length > 0) {
+      screenshotsList.innerHTML = files.screenshots.slice(0, 10).map(screenshot => `
+        <div class="file-item">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 3H14V13H2V3Z"/>
+          </svg>
+          <span>${screenshot}</span>
+        </div>
+      `).join('');
+    } else {
+      screenshotsList.innerHTML = '<div class="empty-state">РЎРєСЂРёРЅС€РѕС‚РѕРІ РЅРµС‚</div>';
+    }
+  } catch (error) {
+    console.error('Error loading files:', error);
+  }
+}
+
+// Switch tab
+function switchTab(tabName) {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  document.querySelectorAll('.tab-content').forEach(content => {
+    content.classList.remove('active');
+  });
+
+  document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+  document.getElementById(`${tabName}Tab`).classList.add('active');
+
+  // Load files when switching to files tab
+  if (tabName === 'files') {
+    loadFilesInfo();
+  }
+
+  // Load stats when switching to stats tab
+  if (tabName === 'stats') {
+    loadStats();
+  }
+}
+
+// Update UI
+function updateUI() {
+  document.getElementById('displayUsername').textContent = currentConfig.username;
+  document.getElementById('usernameInput').value = currentConfig.username;
+  document.getElementById('memorySlider').value = currentConfig.memory;
+  document.getElementById('memoryInput').value = currentConfig.memory;
+
+  // Set optimization profile
+  const profile = currentConfig.optimizationProfile || 'balanced';
+  document.querySelectorAll('.optimization-btn').forEach(btn => {
+    if (btn.getAttribute('data-profile') === profile) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  // Set launcher behavior
+  const behavior = currentConfig.launcherBehavior || 'hide';
+  document.querySelectorAll('.behavior-btn').forEach(btn => {
+    if (btn.getAttribute('data-behavior') === behavior) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  updateIsolationUI();
+  loadSkinPreview();
+}
+
+// Update isolation UI
+function updateIsolationUI() {
+  const versionSelect = document.getElementById('versionSelect');
+  const selectedVersion = versionSelect.value;
+  const isolationBtn = document.getElementById('isolationBtn');
+  const isolationStatus = document.getElementById('isolationStatus');
+
+  if (!selectedVersion) {
+    isolationBtn.classList.remove('active');
+    isolationStatus.classList.remove('isolated');
+    isolationStatus.querySelector('.isolation-text').textContent = 'РћР±С‰Р°СЏ РїР°РїРєР°';
+    return;
+  }
+
+  if (isolatedVersions.has(selectedVersion)) {
+    isolationBtn.classList.add('active');
+    isolationStatus.classList.add('isolated');
+    isolationStatus.querySelector('.isolation-text').textContent = 'РР·РѕР»РёСЂРѕРІР°РЅРЅР°СЏ РїР°РїРєР°';
+  } else {
+    isolationBtn.classList.remove('active');
+    isolationStatus.classList.remove('isolated');
+    isolationStatus.querySelector('.isolation-text').textContent = 'РћР±С‰Р°СЏ РїР°РїРєР°';
+  }
+}
+
+// Launch game
+async function launchGame() {
+  const versionSelect = document.getElementById('versionSelect');
+  const selectedVersion = versionSelect.value;
+
+  if (!selectedVersion) {
+    showNotification('РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РІС‹Р±РµСЂРёС‚Рµ РІРµСЂСЃРёСЋ РґР»СЏ Р·Р°РїСѓСЃРєР°', 'error');
+    return;
+  }
+
+  const playBtn = document.getElementById('playBtn');
+  playBtn.disabled = true;
+  playBtn.querySelector('.play-button-text').textContent = 'РџСЂРѕРІРµСЂРєР°...';
+
+  try {
+    // Check if version is fully downloaded
+    const isReady = await ipcRenderer.invoke('check-version-ready', selectedVersion);
+    if (!isReady) {
+      showNotification('Р’РµСЂСЃРёСЏ РЅРµ РїРѕР»РЅРѕСЃС‚СЊСЋ Р·Р°РіСЂСѓР¶РµРЅР°. РџРµСЂРµСѓСЃС‚Р°РЅРѕРІРёС‚Рµ РІРµСЂСЃРёСЋ.', 'error');
+      playBtn.querySelector('.play-button-text').textContent = 'РРіСЂР°С‚СЊ';
+      playBtn.disabled = false;
+      return;
+    }
+
+    playBtn.querySelector('.play-button-text').textContent = 'Р—Р°РїСѓСЃРє...';
+
+    const result = await ipcRenderer.invoke('launch-game', {
+      version: selectedVersion,
+      username: currentConfig.username,
+      memory: currentConfig.memory,
+      isolated: isolatedVersions.has(selectedVersion),
+      optimizationProfile: currentConfig.optimizationProfile || 'balanced',
+      selectedGPU: currentConfig.selectedGPU || 0
+    });
+
+    if (result.success) {
+      showNotification(`${selectedVersion} Р·Р°РїСѓС‰РµРЅ!`, 'success');
+
+      // Apply launcher behavior
+      const behavior = currentConfig.launcherBehavior || 'hide';
+      if (behavior === 'hide') {
+        await ipcRenderer.invoke('minimize-window');
+      } else if (behavior === 'close') {
+        await ipcRenderer.invoke('close-window');
+        return; // No need to continue if closing
+      }
+      // 'keep' = do nothing, leave window open
+
+      setTimeout(() => {
+        playBtn.querySelector('.play-button-text').textContent = 'РРіСЂР°С‚СЊ';
+        playBtn.disabled = false;
+      }, 1000);
+
+      await loadRunningInstances();
+    } else {
+      showNotification(`РћС€РёР±РєР°: ${result.error || 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ РёРіСЂСѓ'}`, 'error');
+      playBtn.querySelector('.play-button-text').textContent = 'РРіСЂР°С‚СЊ';
+      playBtn.disabled = false;
+    }
+  } catch (error) {
+    console.error('Launch error:', error);
+    showNotification('РћС€РёР±РєР° РїСЂРё Р·Р°РїСѓСЃРєРµ РёРіСЂС‹', 'error');
+    playBtn.querySelector('.play-button-text').textContent = 'РРіСЂР°С‚СЊ';
+    playBtn.disabled = false;
+  }
+}
+
+// Listen for instance events
+ipcRenderer.on('instance-started', (event, instance) => {
+  loadRunningInstances();
+});
+
+ipcRenderer.on('instance-stopped', (event, instanceId) => {
+  loadRunningInstances();
+});
+
+// Save settings
+async function saveSettings() {
+  const username = document.getElementById('usernameInput').value.trim();
+  const memory = parseInt(document.getElementById('memoryInput').value);
+
+  if (!username || username.length > 16) {
+    showNotification('Р’РІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅС‹Р№ РЅРёРєРЅРµР№Рј (1-16 СЃРёРјРІРѕР»РѕРІ)', 'error');
+    return;
+  }
+
+  // Get system limits
+  const memInfo = await ipcRenderer.invoke('get-system-memory');
+
+  if (memory < 512 || memory > memInfo.maxAllocation) {
+    showNotification(`Р’С‹Р±РµСЂРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅРѕРµ Р·РЅР°С‡РµРЅРёРµ RAM (512-${memInfo.maxAllocation} MB)`, 'error');
+    return;
+  }
+
+  currentConfig.username = username;
+  currentConfig.memory = memory;
+  // Save optimization profile and GPU selection
+  currentConfig.optimizationProfile = currentConfig.optimizationProfile || 'balanced';
+  currentConfig.selectedGPU = currentConfig.selectedGPU || 0;
+
+  try {
+    await ipcRenderer.invoke('save-config', currentConfig);
+    await saveIsolationSettings();
+
+    showNotification('РќР°СЃС‚СЂРѕР№РєРё СЃРѕС…СЂР°РЅРµРЅС‹!', 'success');
+    updateUI();
+  } catch (error) {
+    console.error('Save error:', error);
+    showNotification('РћС€РёР±РєР° РїСЂРё СЃРѕС…СЂР°РЅРµРЅРёРё РЅР°СЃС‚СЂРѕРµРє', 'error');
+  }
+}
+
+// Filter versions
+function filterVersions(searchTerm) {
+  const cards = document.querySelectorAll('.version-card');
+  const lowerSearch = searchTerm.toLowerCase();
+
+  cards.forEach(card => {
+    const versionName = card.querySelector('.version-name').textContent.toLowerCase();
+    if (versionName.includes(lowerSearch)) {
+      card.style.display = 'flex';
+    } else {
+      card.style.display = 'none';
+    }
+  });
+}
+
+// Upload skin
+async function uploadSkin(file) {
+  try {
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+      const base64 = e.target.result;
+
+      // Validate image
+      const img = new Image();
+      img.onload = async () => {
+        if ((img.width === 64 && (img.height === 64 || img.height === 32)) ||
+            (img.width === 128 && (img.height === 128 || img.height === 64))) {
+
+          // Save skin
+          const result = await ipcRenderer.invoke('save-skin', base64);
+
+          if (result.success) {
+            // Update preview
+            const preview = document.getElementById('skinPreview');
+            preview.innerHTML = `<img src="${base64}" alt="Skin">`;
+
+            // Show notification
+            showNotification('РЎРєРёРЅ Р·Р°РіСЂСѓР¶РµРЅ СѓСЃРїРµС€РЅРѕ!', 'success');
+          } else {
+            showNotification('РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ СЃРєРёРЅР°', 'error');
+          }
+        } else {
+          showNotification('РќРµРїСЂР°РІРёР»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ СЃРєРёРЅР°. РСЃРїРѕР»СЊР·СѓР№С‚Рµ 64x64 РёР»Рё 64x32 РїРёРєСЃРµР»РµР№.', 'error');
+        }
+      };
+
+      img.src = base64;
+    };
+
+    reader.readAsDataURL(file);
+  } catch (error) {
+    console.error('Error uploading skin:', error);
+    showNotification('РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё СЃРєРёРЅР°', 'error');
+  }
+}
+
+// Remove skin
+async function removeSkin() {
+  try {
+    const result = await ipcRenderer.invoke('remove-skin');
+
+    if (result.success) {
+      const preview = document.getElementById('skinPreview');
+      preview.innerHTML = '<div class="skin-placeholder">РќРµС‚ СЃРєРёРЅР°</div>';
+      showNotification('РЎРєРёРЅ СѓРґР°Р»С‘РЅ', 'success');
+    }
+  } catch (error) {
+    console.error('Error removing skin:', error);
+  }
+}
+
+// Delete version
+async function deleteVersion(versionId) {
+  const confirmed = await showConfirmDialog(
+    'РЈРґР°Р»РёС‚СЊ РІРµСЂСЃРёСЋ',
+    `Р’С‹ СѓРІРµСЂРµРЅС‹, С‡С‚Рѕ С…РѕС‚РёС‚Рµ СѓРґР°Р»РёС‚СЊ РІРµСЂСЃРёСЋ ${versionId}? Р­С‚Рѕ РґРµР№СЃС‚РІРёРµ РЅРµР»СЊР·СЏ РѕС‚РјРµРЅРёС‚СЊ.`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const result = await ipcRenderer.invoke('delete-version', versionId);
+
+    if (result.success) {
+      showNotification(`Р’РµСЂСЃРёСЏ ${versionId} СѓСЃРїРµС€РЅРѕ СѓРґР°Р»РµРЅР°`, 'success');
+      await loadVersions();
+    } else {
+      showNotification(`РћС€РёР±РєР° СѓРґР°Р»РµРЅРёСЏ: ${result.error}`, 'error');
+    }
+  } catch (error) {
+    console.error('Error deleting version:', error);
+    showNotification('РћС€РёР±РєР° РїСЂРё СѓРґР°Р»РµРЅРёРё РІРµСЂСЃРёРё', 'error');
+  }
+}
+
+// Load skin preview
+async function loadSkinPreview() {
+  try {
+    const skinData = await ipcRenderer.invoke('get-skin');
+
+    if (skinData) {
+      const preview = document.getElementById('skinPreview');
+      preview.innerHTML = `<img src="${skinData}" alt="Skin">`;
+    }
+  } catch (error) {
+    console.error('Error loading skin:', error);
+  }
+}
+
+
+// Stats functionality
+async function loadStats() {
+  try {
+    const stats = await ipcRenderer.invoke('get-stats');
+    const favorite = await ipcRenderer.invoke('get-favorite-version');
+
+    // Update overview
+    document.getElementById('totalPlaytime').textContent = formatPlaytime(stats.totalPlaytime);
+    document.getElementById('totalLaunches').textContent = stats.totalLaunches;
+    document.getElementById('favoriteVersion').textContent = favorite ? favorite.version : '-';
+
+    // Load launch history
+    displayLaunchHistory(stats.launchHistory);
+
+    // Load version stats
+    displayVersionStats(stats.versions);
+  } catch (error) {
+    console.error('Error loading stats:', error);
+  }
+}
+
+function formatPlaytime(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${hours} ч ${mins} м`;
+}
+
+function formatTimestamp(isoString) {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 1000 / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1) {
+    return 'Только что';
+  } else if (diffMins < 60) {
+    return `${diffMins} мин назад`;
+  } else if (diffHours < 24) {
+    return `${diffHours} ч назад`;
+  } else if (diffDays === 1) {
+    return 'Вчера';
+  } else if (diffDays < 7) {
+    return `${diffDays} дн назад`;
+  } else {
+    return date.toLocaleDateString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  }
+}
+
+function displayLaunchHistory(history) {
+  const container = document.getElementById('launchHistory');
+  
+  if (!history || history.length === 0) {
+    container.innerHTML = '<div class="empty-state">История запусков пуста</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+  history.slice(0, 20).forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'launch-item';
+    div.innerHTML = `
+      <div>
+        <div class="launch-version">${item.version}</div>
+        <div class="launch-time">${formatTimestamp(item.timestamp)} • ${item.duration} мин</div>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function displayVersionStats(versions) {
+  const container = document.getElementById('versionStats');
+  
+  if (!versions || Object.keys(versions).length === 0) {
+    container.innerHTML = '<div class="empty-state">Нет данных</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+  
+  // Sort by playtime
+  const sortedVersions = Object.entries(versions).sort((a, b) => b[1].playtime - a[1].playtime);
+
+  sortedVersions.forEach(([version, data]) => {
+    const card = document.createElement('div');
+    card.className = 'version-stat-card';
+    
+    const loaderType = version.includes('-forge-') ? 'forge' : 
+                      version.includes('-fabric-') ? 'fabric' : 
+                      version.includes('-neoforge-') ? 'neoforge' :
+                      version.includes('-quilt-') ? 'quilt' :
+                      version.includes('-optifine-') ? 'optifine' : 'vanilla';
+    
+    card.innerHTML = `
+      <div class="version-stat-header">
+        <div class="version-stat-name">${version}</div>
+        <div class="version-stat-badge ${loaderType}">${loaderType}</div>
+      </div>
+      <div class="version-stat-info">
+        <div class="version-stat-row">
+          <span>Время в игре</span>
+          <span>${formatPlaytime(data.playtime)}</span>
+        </div>
+        <div class="version-stat-row">
+          <span>Запусков</span>
+          <span>${data.launches}</span>
+        </div>
+        <div class="version-stat-row">
+          <span>Последний запуск</span>
+          <span>${formatTimestamp(data.lastPlayed)}</span>
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}

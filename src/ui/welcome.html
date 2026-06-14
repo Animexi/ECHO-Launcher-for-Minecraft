@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Добро пожаловать в ECHO Launcher</title>
+  <link rel="stylesheet" href="welcome.css">
+</head>
+<body>
+  <div class="welcome-container">
+    <canvas id="bgCanvas" class="bg-canvas"></canvas>
+    <div class="bg-animation">
+      <div class="grid-overlay"></div>
+    </div>
+
+    <div class="welcome-content" id="welcomeContent">
+      <!-- Step 1: Welcome -->
+      <div class="welcome-step active" data-step="1">
+        <div class="welcome-logo">ECHO</div>
+        <h1>Добро пожаловать!</h1>
+        <p class="welcome-subtitle">Давайте настроим лаунчер и разберемся, как он работает</p>
+        <div class="welcome-features">
+          <div class="feature-card">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="currentColor">
+              <path d="M24 4C12.95 4 4 12.95 4 24C4 35.05 12.95 44 24 44C35.05 44 44 35.05 44 24C44 12.95 35.05 4 24 4ZM24 10C28.4 10 32 13.6 32 18C32 22.4 28.4 26 24 26C19.6 26 16 22.4 16 18C16 13.6 19.6 10 24 10ZM24 40C18.6 40 13.8 37.2 11 33C11 27.4 21.4 24.2 24 24.2C26.6 24.2 37 27.4 37 33C34.2 37.2 29.4 40 24 40Z"/>
+            </svg>
+            <h3>Управление аккаунтами</h3>
+            <p>Локальные и Ely.by аккаунты с поддержкой скинов</p>
+          </div>
+          <div class="feature-card">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="currentColor">
+              <path d="M24 4L28 16L40 17L32 25L34 37L24 31L14 37L16 25L8 17L20 16L24 4Z"/>
+            </svg>
+            <h3>Автоматизация Java</h3>
+            <p>Автоматическая загрузка правильной версии Java</p>
+          </div>
+          <div class="feature-card">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="currentColor">
+              <path d="M8 8V40H40V8H8ZM36 36H12V12H36V36Z"/>
+            </svg>
+            <h3>Изоляция версий</h3>
+            <p>Отдельные папки для модов каждой версии</p>
+          </div>
+        </div>
+        <button class="welcome-btn primary" onclick="nextStep()">Начать настройку</button>
+      </div>
+
+      <!-- Step 2: Java Requirements -->
+      <div class="welcome-step" data-step="2">
+        <div class="step-icon">
+          <svg width="64" height="64" viewBox="0 0 64 64" fill="currentColor">
+            <rect x="16" y="16" width="32" height="32" rx="4" fill="#2ecc71"/>
+            <text x="32" y="40" font-size="20" fill="#0a0a0a" text-anchor="middle" font-weight="bold">Java</text>
+          </svg>
+        </div>
+        <h2>Версии Java для Minecraft</h2>
+        <p class="step-description">Разные версии Minecraft требуют разные версии Java. Лаунчер автоматически определит и загрузит нужную версию.</p>
+
+        <div class="java-requirements">
+          <div class="requirement-card">
+            <div class="requirement-icon java-8">8</div>
+            <div class="requirement-info">
+              <h3>Java 8</h3>
+              <p>Для Minecraft 1.16 и старше</p>
+              <span class="requirement-note">Классические версии</span>
+            </div>
+          </div>
+          <div class="requirement-card">
+            <div class="requirement-icon java-17">17</div>
+            <div class="requirement-info">
+              <h3>Java 17</h3>
+              <p>Для Minecraft 1.17 - 1.20.4</p>
+              <span class="requirement-note">Большинство современных версий</span>
+            </div>
+          </div>
+          <div class="requirement-card">
+            <div class="requirement-icon java-21">21</div>
+            <div class="requirement-info">
+              <h3>Java 21</h3>
+              <p>Для Minecraft 1.20.5 и новее</p>
+              <span class="requirement-note">Новейшие версии</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="info-box">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+          </svg>
+          <p><strong>Автоматически:</strong> При запуске игры лаунчер проверит наличие нужной Java и предложит скачать, если её нет</p>
+        </div>
+
+        <div class="step-actions">
+          <button class="welcome-btn secondary" onclick="prevStep()">Назад</button>
+          <button class="welcome-btn primary" onclick="nextStep()">Далее</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Skins & Ely.by -->
+      <div class="welcome-step" data-step="3">
+        <div class="step-icon">
+          <svg width="64" height="64" viewBox="0 0 64 64" fill="currentColor">
+            <circle cx="32" cy="32" r="28" fill="#2a2a2a"/>
+            <path d="M32 8C17.6 8 6 19.6 6 34C6 48.4 17.6 60 32 60C46.4 60 58 48.4 58 34C58 19.6 46.4 8 32 8ZM32 16C37.5 16 42 20.5 42 26C42 31.5 37.5 36 32 36C26.5 36 22 31.5 22 26C22 20.5 26.5 16 32 16ZM32 56C24.8 56 18.4 52.2 14.5 46.5C14.5 39.5 28.5 35.5 32 35.5C35.5 35.5 49.5 39.5 49.5 46.5C45.6 52.2 39.2 56 32 56Z" fill="#666"/>
+          </svg>
+        </div>
+        <h2>Как работают скины</h2>
+        <p class="step-description">В ECHO Launcher есть два способа использования скинов</p>
+
+        <div class="skins-methods">
+          <div class="method-card">
+            <div class="method-badge local">Локальный</div>
+            <h3>Локальный аккаунт</h3>
+            <ol class="instruction-list">
+              <li>Создайте локальный аккаунт во вкладке "Аккаунты"</li>
+              <li>Загрузите свой скин (PNG файл 64x64 или 64x32)</li>
+              <li>Скин будет применён локально на вашем ПК</li>
+            </ol>
+            <div class="method-note">
+              <strong>Важно:</strong> Другие игроки на серверах НЕ увидят ваш скин
+            </div>
+          </div>
+
+          <div class="method-card featured">
+            <div class="method-badge ely">Рекомендуется</div>
+            <h3>Аккаунт Ely.by</h3>
+            <ol class="instruction-list">
+              <li>Зарегистрируйтесь на <a href="https://ely.by" target="_blank">ely.by</a></li>
+              <li>Загрузите скин в профиле на сайте</li>
+              <li>Войдите через Ely.by во вкладке "Аккаунты"</li>
+              <li>Ваш скин будет виден другим игрокам на серверах с поддержкой Ely.by</li>
+            </ol>
+            <div class="method-note success">
+              <strong>Преимущества:</strong> Скины видны другим, поддержка HD скинов, плащи
+            </div>
+          </div>
+        </div>
+
+        <div class="step-actions">
+          <button class="welcome-btn secondary" onclick="prevStep()">Назад</button>
+          <button class="welcome-btn primary" onclick="nextStep()">Далее</button>
+        </div>
+      </div>
+
+      <!-- Step 4: Quick Start -->
+      <div class="welcome-step" data-step="4">
+        <div class="step-icon">
+          <svg width="64" height="64" viewBox="0 0 64 64" fill="currentColor">
+            <path d="M20 12L52 32L20 52V12Z" fill="#2ecc71"/>
+          </svg>
+        </div>
+        <h2>Быстрый старт</h2>
+        <p class="step-description">Всё готово! Вот что нужно сделать дальше:</p>
+
+        <div class="quick-start-steps">
+          <div class="quick-step">
+            <div class="quick-step-number">1</div>
+            <div class="quick-step-content">
+              <h3>Создайте аккаунт</h3>
+              <p>Перейдите во вкладку "Аккаунты" и добавьте локальный аккаунт или войдите через Ely.by</p>
+            </div>
+          </div>
+          <div class="quick-step">
+            <div class="quick-step-number">2</div>
+            <div class="quick-step-content">
+              <h3>Выберите версию</h3>
+              <p>Во вкладке "Версии" найдите нужную версию Minecraft (Vanilla, Forge, Fabric)</p>
+            </div>
+          </div>
+          <div class="quick-step">
+            <div class="quick-step-number">3</div>
+            <div class="quick-step-content">
+              <h3>Настройте параметры</h3>
+              <p>В настройках выберите объём RAM и профиль оптимизации</p>
+            </div>
+          </div>
+          <div class="quick-step">
+            <div class="quick-step-number">4</div>
+            <div class="quick-step-content">
+              <h3>Запустите игру!</h3>
+              <p>Нажмите "Играть" — Java скачается автоматически, если нужно</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="info-box">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+          </svg>
+          <p>Это окно больше не появится. Всю документацию можно найти на GitHub проекта.</p>
+        </div>
+
+        <div class="step-actions">
+          <button class="welcome-btn secondary" onclick="prevStep()">Назад</button>
+          <button class="welcome-btn primary" onclick="finishSetup()">Начать использовать</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="welcome.js"></script>
+  <script src="background.js"></script>
+</body>
+</html>
