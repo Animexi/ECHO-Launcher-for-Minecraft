@@ -1,25 +1,27 @@
-﻿// Custom confirmation dialog
+let globalTranslate = (key) => key;
+
+function setTranslateFunction(fn) {
+  globalTranslate = fn;
+}
+
 function showConfirmDialog(title, message) {
   return new Promise((resolve) => {
-    // Create overlay
     const overlay = document.createElement('div');
     overlay.className = 'confirmation-overlay';
 
-    // Create dialog
     overlay.innerHTML = `
       <div class="confirmation-dialog">
         <div class="confirmation-title">${title}</div>
         <div class="confirmation-message">${message}</div>
         <div class="confirmation-buttons">
-          <button class="confirmation-btn cancel">Отмена</button>
-          <button class="confirmation-btn confirm">Удалить</button>
+          <button class="confirmation-btn cancel">${globalTranslate('common_cancel')}</button>
+          <button class="confirmation-btn confirm">${globalTranslate('common_delete')}</button>
         </div>
       </div>
     `;
 
     document.body.appendChild(overlay);
 
-    // Add event listeners
     const cancelBtn = overlay.querySelector('.cancel');
     const confirmBtn = overlay.querySelector('.confirm');
 
@@ -33,7 +35,6 @@ function showConfirmDialog(title, message) {
       resolve(true);
     });
 
-    // Click outside to cancel
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) {
         overlay.remove();
@@ -43,7 +44,6 @@ function showConfirmDialog(title, message) {
   });
 }
 
-// Show notification
 function showNotification(message, type = 'info') {
   const notification = document.createElement('div');
   notification.className = `notification notification-${type}`;
@@ -69,3 +69,7 @@ function showNotification(message, type = 'info') {
     setTimeout(() => notification.remove(), 300);
   }, 3000);
 }
+
+window.showConfirmDialog = showConfirmDialog;
+window.showNotification = showNotification;
+window.setTranslateFunction = setTranslateFunction;

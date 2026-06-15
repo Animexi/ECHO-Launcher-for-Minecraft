@@ -1,7 +1,13 @@
-// Custom Dialog System for File Manager
+function getTranslation(key) {
+  if (window.localizationManager) {
+    return window.localizationManager.t(key);
+  }
+  return key;
+}
 
 class CustomDialog {
-  static alert(message, title = 'Внимание') {
+  static alert(message, title = null) {
+    if (!title) title = getTranslation('common_attention');
     return new Promise((resolve) => {
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay';
@@ -15,7 +21,7 @@ class CustomDialog {
             <p style="margin: 0; color: #ccc; line-height: 1.5;">${message}</p>
           </div>
           <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
-            <button class="btn-primary dialog-ok">OK</button>
+            <button class="btn-primary dialog-ok">${getTranslation('common_ok')}</button>
           </div>
         </div>
       `;
@@ -33,12 +39,12 @@ class CustomDialog {
         if (e.target === overlay) close();
       });
 
-      // Focus OK button
       overlay.querySelector('.dialog-ok').focus();
     });
   }
 
-  static confirm(message, title = 'Подтверждение') {
+  static confirm(message, title = null) {
+    if (!title) title = getTranslation('common_confirmation');
     return new Promise((resolve) => {
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay';
@@ -52,8 +58,8 @@ class CustomDialog {
             <p style="margin: 0; color: #ccc; line-height: 1.5;">${message}</p>
           </div>
           <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
-            <button class="btn-secondary dialog-cancel">Отмена</button>
-            <button class="btn-primary dialog-confirm">Подтвердить</button>
+            <button class="btn-secondary dialog-cancel">${getTranslation('common_cancel')}</button>
+            <button class="btn-primary dialog-confirm">${getTranslation('common_ok')}</button>
           </div>
         </div>
       `;
@@ -72,12 +78,12 @@ class CustomDialog {
         if (e.target === overlay) close(false);
       });
 
-      // Focus confirm button
       overlay.querySelector('.dialog-confirm').focus();
     });
   }
 
-  static prompt(message, defaultValue = '', title = 'Ввод') {
+  static prompt(message, defaultValue = '', title = null) {
+    if (!title) title = getTranslation('common_input');
     return new Promise((resolve) => {
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay';
@@ -92,8 +98,8 @@ class CustomDialog {
             <input type="text" class="styled-input dialog-input" value="${defaultValue}" style="width: 100%;">
           </div>
           <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
-            <button class="btn-secondary dialog-cancel">Отмена</button>
-            <button class="btn-primary dialog-ok">OK</button>
+            <button class="btn-secondary dialog-cancel">${getTranslation('common_cancel')}</button>
+            <button class="btn-primary dialog-ok">${getTranslation('common_ok')}</button>
           </div>
         </div>
       `;
@@ -123,7 +129,6 @@ class CustomDialog {
         if (e.target === overlay) close(null);
       });
 
-      // Focus and select input
       input.focus();
       input.select();
     });
@@ -146,14 +151,14 @@ class CustomDialog {
       overlay.innerHTML = `
         <div class="modal-dialog" style="max-width: 600px;">
           <div class="modal-header">
-            <h3 style="margin: 0;">Свойства</h3>
+            <h3 style="margin: 0;">${getTranslation('common_properties')}</h3>
             <button class="modal-close-x">×</button>
           </div>
           <div class="modal-body" style="padding: 20px;">
             ${propsHtml}
           </div>
           <div class="modal-footer" style="display: flex; justify-content: flex-end;">
-            <button class="btn-primary dialog-ok">Закрыть</button>
+            <button class="btn-primary dialog-ok">${getTranslation('common_ok')}</button>
           </div>
         </div>
       `;
@@ -174,5 +179,4 @@ class CustomDialog {
   }
 }
 
-// Make it globally available
 window.CustomDialog = CustomDialog;

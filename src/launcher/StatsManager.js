@@ -1,6 +1,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
+const { bt } = require('../localization/backend-translations');
 
 class StatsManager {
   constructor() {
@@ -50,7 +51,6 @@ class StatsManager {
     const sessionId = `${version}-${Date.now()}`;
     const startTime = Date.now();
 
-    // Initialize version stats if not exists
     if (!this.stats.versions[version]) {
       this.stats.versions[version] = {
         launches: 0,
@@ -59,12 +59,10 @@ class StatsManager {
       };
     }
 
-    // Update stats
     this.stats.totalLaunches++;
     this.stats.versions[version].launches++;
     this.stats.versions[version].lastPlayed = new Date().toISOString();
 
-    // Track active session
     this.activeSessions.set(sessionId, {
       version,
       startTime
@@ -87,13 +85,11 @@ class StatsManager {
     const endTime = Date.now();
     const duration = Math.round((endTime - session.startTime) / 1000 / 60); // minutes
 
-    // Update playtime
     this.stats.totalPlaytime += duration;
     if (this.stats.versions[session.version]) {
       this.stats.versions[session.version].playtime += duration;
     }
 
-    // Add to launch history (keep last 50)
     this.stats.launchHistory.unshift({
       version: session.version,
       timestamp: new Date(session.startTime).toISOString(),
@@ -125,7 +121,6 @@ class StatsManager {
       return null;
     }
 
-    // Find version with most playtime
     const favorite = versions.reduce((max, [version, data]) => {
       if (!max || data.playtime > max.playtime) {
         return { version, ...data };
@@ -151,17 +146,18 @@ class StatsManager {
     const diffDays = Math.floor(diffHours / 24);
 
     if (diffMins < 1) {
-      return 'Только что';
+      return bt('time_just_now');
     } else if (diffMins < 60) {
-      return `${diffMins} мин назад`;
+      return bt('time_min_ago', {min: diffMins});
     } else if (diffHours < 24) {
-      return `${diffHours} ч назад`;
+      return bt('time_h_ago', {h: diffHours});
     } else if (diffDays === 1) {
-      return 'Вчера';
+      return bt('time_yesterday');
     } else if (diffDays < 7) {
-      return `${diffDays} дн назад`;
+      return bt('time_d_ago', {d: diffDays});
     } else {
-      return date.toLocaleDateString('ru-RU', {
+      const lang = require('../localization/backend-translations').getLanguage();
+      return date.toLocaleDateString(lang === 'en' ? 'en-US' : 'ru-RU', {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric'

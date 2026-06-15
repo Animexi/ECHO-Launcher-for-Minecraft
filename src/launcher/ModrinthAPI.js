@@ -6,10 +6,8 @@ class ModrinthAPI {
     this.userAgent = 'ECHO-Launcher/1.0.0';
   }
 
-  // Извлечение базовой версии Minecraft (убирает -forge-, -fabric- и т.д.)
   extractBaseVersion(versionString) {
     if (!versionString) return '';
-    // Убираем все после первого дефиса, если это модлоадер
     const match = versionString.match(/^(\d+\.\d+(?:\.\d+)?)/);
     return match ? match[1] : versionString;
   }
@@ -19,7 +17,6 @@ class ModrinthAPI {
       const params = new URLSearchParams();
       let facets = [['project_type:mod']];
 
-      // Фильтр по версии Minecraft (извлекаем базовую версию)
       if (filters.gameVersion) {
         const baseVersion = this.extractBaseVersion(filters.gameVersion);
         if (baseVersion) {
@@ -27,7 +24,6 @@ class ModrinthAPI {
         }
       }
 
-      // Фильтр по загрузчику
       if (filters.loader && filters.loader !== '') {
         facets.push([`categories:${filters.loader.toLowerCase()}`]);
       }

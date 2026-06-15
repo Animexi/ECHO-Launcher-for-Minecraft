@@ -5,6 +5,7 @@ const { spawn } = require('child_process');
 const os = require('os');
 const extract = require('extract-zip');
 const JavaManager = require('./JavaManager');
+const { bt } = require('../localization/backend-translations');
 
 class MinecraftLauncher {
   constructor() {
@@ -45,10 +46,10 @@ class MinecraftLauncher {
   async downloadFabricLoader(mcVersion, loaderVersion, progressCallback) {
     try {
       const profileUrl = `https://meta.fabricmc.net/v2/versions/loader/${mcVersion}/${loaderVersion}/profile/json`;
-      progressCallback({ stage: 'Загрузка профиля Fabric', progress: 50 });
+      progressCallback({ stage: bt('stage_fabric_profile'), progress: 50 });
       const profileResponse = await axios.get(profileUrl);
       const fabricProfile = profileResponse.data;
-      progressCallback({ stage: 'Загрузка библиотек Fabric', progress: 60 });
+      progressCallback({ stage: bt('stage_fabric_libs'), progress: 60 });
       const libraries = fabricProfile.libraries || [];
       for (let i = 0; i < libraries.length; i++) {
         const library = libraries[i];
@@ -70,7 +71,7 @@ class MinecraftLauncher {
           }
         }
         if (i % 5 === 0) {
-          progressCallback({ stage: `Загрузка библиотек Fabric (${i}/${libraries.length})`, progress: 60 + ((i / libraries.length) * 30) });
+          progressCallback({ stage: bt('stage_fabric_libs_progress', {current: i, total: libraries.length}), progress: 60 + ((i / libraries.length) * 30) });
         }
       }
       return fabricProfile;
@@ -196,10 +197,10 @@ class MinecraftLauncher {
         const mcVersion = versionId.split('-')[0];
         const loaderVersion = versionId.split('-')[2];
         const loaderName = isForge ? 'Forge' : isFabric ? 'Fabric' : isOptiFine ? 'OptiFine' : isNeoForge ? 'NeoForge' : 'Quilt';
-        progressCallback({ stage: `Подготовка ${loaderName} для ${mcVersion}`, progress: 5 });
+        progressCallback({ stage: bt('stage_preparing', {loader: loaderName, version: mcVersion}), progress: 5 });
         const vanillaDir = path.join(this.versionsDir, mcVersion);
         if (!await this.isVersionFullyDownloaded(mcVersion)) {
-          progressCallback({ stage: 'Загрузка базовой версии', progress: 10 });
+          progressCallback({ stage: bt('stage_downloading_base'), progress: 10 });
           const result = await this.downloadMinecraft(mcVersion, progressCallback);
           if (!result.success) return result;
         }
@@ -221,7 +222,7 @@ class MinecraftLauncher {
 
         let moddedJson;
         if (isFabric && loaderVersion) {
-          progressCallback({ stage: 'Загрузка Fabric Loader', progress: 40 });
+          progressCallback({ stage: bt('stage_downloading_fabric'), progress: 40 });
           const fabricProfile = await this.downloadFabricLoader(mcVersion, loaderVersion, progressCallback);
           if (fabricProfile) {
             moddedJson = fabricProfile;
@@ -243,11 +244,10 @@ class MinecraftLauncher {
           };
         }
         await fs.writeJson(path.join(versionDir, `${versionId}.json`), moddedJson, { spaces: 2 });
-        progressCallback({ stage: 'Установка завершена', progress: 100 });
+        progressCallback({ stage: bt('stage_install_complete'), progress: 100 });
         return { success: true };
       }
 
-      // Vanilla download
       const versionsManifest = await axios.get('https://launchermeta.mojang.com/mc/game/version_manifest.json');
       const versionInfo = versionsManifest.data.versions.find(v => v.id === versionId);
       if (!versionInfo) throw new Error('Version not found');
@@ -256,13 +256,13 @@ class MinecraftLauncher {
       const versionDir = path.join(this.versionsDir, versionId);
       await fs.ensureDir(versionDir);
       await fs.writeJson(path.join(versionDir, `${versionId}.json`), versionData, { spaces: 2 });
-      progressCallback({ stage: 'Загрузка клиента', progress: 20 });
+      progressCallback({ stage: bt('stage_downloading_client'), progress: 20 });
       const clientJar = await axios.get(versionData.downloads.client.url, { responseType: 'arraybuffer', onDownloadProgress: (p) => {
         const percent = Math.round((p.loaded * 100) / p.total);
-        progressCallback({ stage: 'Загрузка клиента', progress: 20 + percent * 0.2 });
+        progressCallback({ stage: bt('stage_downloading_client'), progress: 20 + percent * 0.2 });
       } });
       await fs.writeFile(path.join(versionDir, `${versionId}.jar`), clientJar.data);
-      progressCallback({ stage: 'Загрузка библиотек', progress: 40 });
+      progressCallback({ stage: bt('stage_downloading_libs'), progress: 40 });
       const libraries = versionData.libraries || [];
       for (let i = 0; i < libraries.length; i++) {
         const library = libraries[i];
@@ -278,7 +278,7 @@ class MinecraftLauncher {
           }
         }
         if (i % 10 === 0) {
-          progressCallback({ stage: `Загрузка библиотек (${i}/${libraries.length})`, progress: 40 + ((i / libraries.length) * 20) });
+          progressCallback({ stage: bt('stage_downloading_libs_progress', {current: i, total: libraries.length}), progress: 40 + ((i / libraries.length) * 20) });
         }
       }
       for (const library of libraries) {
@@ -297,7 +297,7 @@ class MinecraftLauncher {
           }
         }
       }
-      progressCallback({ stage: 'Загрузка ассетов', progress: 60 });
+      progressCallback({ stage: bt('stage_downloading_assets'), progress: 60 });
       if (versionData.assetIndex) {
         const assetIndexUrl = versionData.assetIndex.url;
         const assetIndexData = await axios.get(assetIndexUrl);
@@ -324,7 +324,7 @@ class MinecraftLauncher {
           }
           assetCount++;
           if (assetCount % 50 === 0 || assetCount === assetKeys.length) {
-            progressCallback({ stage: `Загрузка ассетов (${assetCount}/${assetKeys.length})`, progress: 60 + ((assetCount / assetKeys.length) * 30) });
+            progressCallback({ stage: bt('stage_downloading_assets_progress', {current: assetCount, total: assetKeys.length}), progress: 60 + ((assetCount / assetKeys.length) * 30) });
           }
         };
         for (let i = 0; i < assetKeys.length; i += concurrency) {
@@ -338,7 +338,7 @@ class MinecraftLauncher {
       await fs.ensureDir(path.join(instanceDir, 'resourcepacks'));
       await fs.ensureDir(path.join(instanceDir, 'screenshots'));
       await fs.ensureDir(path.join(instanceDir, 'logs'));
-      progressCallback({ stage: 'Завершено', progress: 100 });
+      progressCallback({ stage: bt('stage_complete'), progress: 100 });
       return { success: true };
     } catch (error) {
       console.error('Download error:', error);
@@ -353,17 +353,14 @@ class MinecraftLauncher {
       for (const version of versions) {
         const versionDir = path.join(this.versionsDir, version);
 
-        // Проверяем есть ли modpack.json (это модпак)
         const modpackJsonPath = path.join(versionDir, 'modpack.json');
         if (await fs.pathExists(modpackJsonPath)) {
-          // Это модпак - проверяем наличие файлов версии
           const versionJsonPath = path.join(versionDir, `${version}.json`);
           const jarPath = path.join(versionDir, `${version}.jar`);
           if (await fs.pathExists(versionJsonPath) && await fs.pathExists(jarPath)) {
             installedVersions.push(version);
           }
         } else {
-          // Обычная версия - проверяем стандартным способом
           if (await this.isVersionFullyDownloaded(version)) {
             installedVersions.push(version);
           }
@@ -378,7 +375,6 @@ class MinecraftLauncher {
   async launchGame(config) {
     const { version, username, memory, isolated = false, optimizationProfile = 'balanced', selectedGPU = 0, elyAuth = null, preferredJava = null } = config;
 
-    // Проверяем является ли это модпаком
     const versionDir = path.join(this.versionsDir, version);
     const modpackJsonPath = path.join(versionDir, 'modpack.json');
     const isModpack = await fs.pathExists(modpackJsonPath);
@@ -388,7 +384,6 @@ class MinecraftLauncher {
     await this.downloadMissingLibraries(resolvedJson);
     let instanceDir;
 
-    // Модпаки всегда используют свою папку в versions
     if (isModpack) {
       instanceDir = versionDir;
     } else if (isolated) {
@@ -451,11 +446,9 @@ class MinecraftLauncher {
     }
     await this.downloadAuthlibInjector();
 
-    // Get or download required Java version
     const mcVersion = version.split('-')[0]; // Extract base version (e.g., "1.20.1" from "1.20.1-fabric-0.14.21")
     let javaPath = null;
 
-    // First, check if user has set a preferred Java version
     if (preferredJava) {
       console.log(`User preferred Java ${preferredJava} specified`);
       javaPath = await this.javaManager.getJavaExecutable(preferredJava);
@@ -467,7 +460,6 @@ class MinecraftLauncher {
       }
     }
 
-    // If no preferred Java or preferred not found, use auto-detection
     if (!javaPath) {
       javaPath = await this.javaManager.getJavaForMinecraft(mcVersion);
     }
@@ -488,7 +480,6 @@ class MinecraftLauncher {
         console.warn(`Failed to download Java ${requiredJavaVersion}:`, downloadError);
       }
 
-      // If still no Java, try system Java as fallback
       if (!javaPath) {
         const systemJava = await this.javaManager.getSystemJava();
         const requiredVersion = this.javaManager.getJavaVersionForMinecraft(mcVersion);
@@ -497,7 +488,6 @@ class MinecraftLauncher {
           console.log(`Using system Java ${systemJava.version}`);
           javaPath = 'java';
         } else {
-          // Last resort: try 'java' command anyway
           console.warn(`Java ${requiredVersion} not found, trying system 'java' command as fallback`);
           javaPath = 'java';
         }

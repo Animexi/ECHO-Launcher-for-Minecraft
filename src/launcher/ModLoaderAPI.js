@@ -14,11 +14,9 @@ class ModLoaderAPI {
     }
 
     try {
-      // Use new Forge Maven metadata API
       const response = await axios.get('https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml');
       const xmlText = response.data;
 
-      // Parse XML to get versions
       const versionMatches = xmlText.match(/<version>([^<]+)<\/version>/g);
 
       if (!versionMatches) {
@@ -32,7 +30,6 @@ class ModLoaderAPI {
       versionMatches.forEach(match => {
         const version = match.replace(/<\/?version>/g, '');
 
-        // Parse version format: 1.20.1-47.2.0
         const parts = version.split('-');
         if (parts.length >= 2) {
           const mcVersion = parts[0];
@@ -51,7 +48,6 @@ class ModLoaderAPI {
         }
       });
 
-      // Sort by Minecraft version (newest first)
       versions.sort((a, b) => {
         const versionA = a.mcVersion.split('.').map(Number);
         const versionB = b.mcVersion.split('.').map(Number);
@@ -73,7 +69,6 @@ class ModLoaderAPI {
   }
 
   getFallbackForgeVersions() {
-    // Fallback versions if API fails
     return [
       { id: '1.20.1-forge-47.2.20', mcVersion: '1.20.1', forgeVersion: '47.2.20', type: 'release', loader: 'forge' },
       { id: '1.20-forge-46.0.14', mcVersion: '1.20', forgeVersion: '46.0.14', type: 'release', loader: 'forge' },
@@ -108,7 +103,6 @@ class ModLoaderAPI {
       const versions = [];
       const latestLoader = loaderVersions[0].version;
 
-      // Get stable versions only, limit to 50
       const stableGames = gameVersions.filter(v => v.stable).slice(0, 50);
 
       for (const game of stableGames) {
@@ -144,7 +138,6 @@ class ModLoaderAPI {
   }
 
   async getOptiFineVersions() {
-    // OptiFine doesn't have public API, using comprehensive list
     return [
       { id: '1.21.1-optifine-HD_U_J2', mcVersion: '1.21.1', optifineVersion: 'HD_U_J2', type: 'HD Ultra', loader: 'optifine' },
       { id: '1.21-optifine-HD_U_J1', mcVersion: '1.21', optifineVersion: 'HD_U_J1', type: 'HD Ultra', loader: 'optifine' },
@@ -188,7 +181,6 @@ class ModLoaderAPI {
     }
 
     try {
-      // NeoForge Maven API
       const response = await axios.get('https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge');
       const versions = response.data.versions || [];
 
@@ -196,7 +188,6 @@ class ModLoaderAPI {
       const versionSet = new Set();
 
       versions.forEach(version => {
-        // NeoForge format: 20.2.88 for 1.20.2
         const parts = version.split('.');
         if (parts.length >= 2) {
           const major = parts[0];
@@ -266,7 +257,6 @@ class ModLoaderAPI {
       const versions = [];
       const latestLoader = loaderVersions[0].version;
 
-      // Get stable versions only, limit to 50
       const stableGames = gameVersions.filter(v => v.stable).slice(0, 50);
 
       for (const game of stableGames) {

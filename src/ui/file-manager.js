@@ -1,7 +1,10 @@
-// File Manager Implementation
-// ipcRenderer is already declared in renderer.js, so we use the global one
+function t(key, params = {}) {
+  if (window.localizationManager && typeof window.localizationManager.t === 'function') {
+    return window.localizationManager.t(key, params);
+  }
+  return key;
+}
 
-// Helper functions for path operations
 function getBasename(filePath) {
   const separator = filePath.includes('\\') ? '\\' : '/';
   const parts = filePath.split(separator);
@@ -34,77 +37,62 @@ class FileManager {
   }
 
   initializeElements() {
-    // Navigation
     this.navBackBtn = document.getElementById('navBackBtn');
     this.navForwardBtn = document.getElementById('navForwardBtn');
     this.navUpBtn = document.getElementById('navUpBtn');
     this.navRefreshBtn = document.getElementById('navRefreshBtn');
 
-    // Breadcrumb
     this.breadcrumb = document.getElementById('breadcrumb');
 
-    // Actions
     this.newFolderBtn = document.getElementById('newFolderBtn');
     this.viewListBtn = document.getElementById('viewListBtn');
     this.viewGridBtn = document.getElementById('viewGridBtn');
 
-    // Content
     this.fileTree = document.getElementById('fileTree');
     this.fileListContent = document.getElementById('fileListContent');
 
-    // Status
     this.fileStatusText = document.getElementById('fileStatusText');
     this.fileStatusSelection = document.getElementById('fileStatusSelection');
 
-    // Context menu
     this.contextMenu = document.getElementById('fileContextMenu');
   }
 
   attachEventListeners() {
-    // Navigation buttons
     this.navBackBtn.addEventListener('click', () => this.navigateBack());
     this.navForwardBtn.addEventListener('click', () => this.navigateForward());
     this.navUpBtn.addEventListener('click', () => this.navigateUp());
     this.navRefreshBtn.addEventListener('click', () => this.refresh());
 
-    // New folder
     this.newFolderBtn.addEventListener('click', () => this.createNewFolder());
 
-    // View mode
     this.viewListBtn.addEventListener('click', () => this.setViewMode('list'));
     this.viewGridBtn.addEventListener('click', () => this.setViewMode('grid'));
 
-    // File list interactions
     this.fileListContent.addEventListener('click', (e) => this.handleFileListClick(e));
     this.fileListContent.addEventListener('dblclick', (e) => this.handleFileListDblClick(e));
     this.fileListContent.addEventListener('contextmenu', (e) => this.handleContextMenu(e));
 
-    // Drag and drop
     this.fileListContent.addEventListener('dragstart', (e) => this.handleDragStart(e));
     this.fileListContent.addEventListener('dragover', (e) => this.handleDragOver(e));
     this.fileListContent.addEventListener('dragleave', (e) => this.handleDragLeave(e));
     this.fileListContent.addEventListener('drop', (e) => this.handleDrop(e));
 
-    // Context menu actions
     this.contextMenu.addEventListener('click', (e) => this.handleContextMenuClick(e));
 
-    // Hide context menu on outside click
     document.addEventListener('click', (e) => {
       if (!this.contextMenu.contains(e.target)) {
         this.contextMenu.classList.add('hidden');
       }
     });
 
-    // Keyboard shortcuts
     document.addEventListener('keydown', (e) => this.handleKeyDown(e));
 
-    // IPC listeners
-    ipcRenderer.on('file-operation-result', (event, result) => {
+    window.ipcRenderer.on('file-operation-result', (event, result) => {
       if (result.success) {
         this.refresh();
-        this.updateStatus(result.message || 'Операция выполнена');
+        this.updateStatus(result.message || t('file_manager_operation_success'));
       } else {
-        alert(`Ошибка: ${result.error}`);
+        alert(t('error_general', {error: result.error}));
       }
     });
   }
@@ -112,7 +100,6 @@ class FileManager {
   async loadRootDirectory() {
     console.log('loadRootDirectory called');
 
-    // Clear any initial loading state
     if (this.fileTree) {
       this.fileTree.innerHTML = '';
     }
@@ -120,7 +107,7 @@ class FileManager {
       this.fileListContent.innerHTML = '';
     }
 
-    const result = await ipcRenderer.invoke('get-minecraft-root');
+    const result = await window.ipcRenderer.invoke('get-minecraft-root');
     console.log('get-minecraft-root result:', result);
 
     if (result.success) {
@@ -128,23 +115,22 @@ class FileManager {
       await this.navigateTo(result.path);
     } else {
       console.error('Failed to get root directory:', result.error);
-      await CustomDialog.alert('Не удалось загрузить корневую директорию', 'Ошибка');
+      await CustomDialog.alert(t('error_load_root'), t('common_error_occurred'));
     }
   }
 
   async navigateTo(dirPath) {
     console.log('navigateTo called with:', dirPath);
-    this.updateStatus('Загрузка...');
+    this.updateStatus(t('common_loading'));
 
-    const result = await ipcRenderer.invoke('list-directory', dirPath);
+    const result = await window.ipcRenderer.invoke('list-directory', dirPath);
     console.log('list-directory result:', result);
 
     if (!result.success) {
-      await CustomDialog.alert(`Ошибка при открытии папки: ${result.error}`, 'Ошибка');
+      await CustomDialog.alert(t('file_manager_open_error', {error: result.error}), t('common_error_occurred'));
       return;
     }
 
-    // Update history
     if (this.historyIndex < this.navigationHistory.length - 1) {
       this.navigationHistory = this.navigationHistory.slice(0, this.historyIndex + 1);
     }
@@ -158,7 +144,7 @@ class FileManager {
     this.updateNavigationButtons();
     this.updateBreadcrumb();
     this.renderFileList(result.files);
-    this.updateStatus(`${result.files.length} элемент(ов)`);
+    this.updateStatus(t('files_items_count', {count: result.files.length}));
     console.log('navigateTo finished');
   }
 
@@ -183,7 +169,7 @@ class FileManager {
   async navigateUp() {
     if (!this.currentPath) return;
 
-    const result = await ipcRenderer.invoke('get-parent-directory', this.currentPath);
+    const result = await window.ipcRenderer.invoke('get-parent-directory', this.currentPath);
     if (result.success && result.parent) {
       this.navigateTo(result.parent);
     }
@@ -196,12 +182,12 @@ class FileManager {
   }
 
   async loadDirectory(dirPath) {
-    this.updateStatus('Загрузка...');
+    this.updateStatus(t('common_loading'));
 
-    const result = await ipcRenderer.invoke('list-directory', dirPath);
+    const result = await window.ipcRenderer.invoke('list-directory', dirPath);
 
     if (!result.success) {
-      await CustomDialog.alert(`Ошибка при открытии папки: ${result.error}`, 'Ошибка');
+      await CustomDialog.alert(t('file_manager_open_error', {error: result.error}), t('common_error_occurred'));
       return;
     }
 
@@ -210,7 +196,7 @@ class FileManager {
 
     this.updateBreadcrumb();
     this.renderFileList(result.files);
-    this.updateStatus(`${result.files.length} элемент(ов)`);
+    this.updateStatus(t('files_items_count', {count: result.files.length}));
   }
 
   updateNavigationButtons() {
@@ -247,7 +233,6 @@ class FileManager {
     console.log('renderFileList called with', files.length, 'files');
     console.log('fileListContent element:', this.fileListContent);
 
-    // Remove any loading spinners
     const loadingSpinners = this.fileListContent.querySelectorAll('.loading-spinner');
     loadingSpinners.forEach(spinner => spinner.remove());
 
@@ -257,14 +242,13 @@ class FileManager {
           <svg width="64" height="64" viewBox="0 0 64 64" fill="currentColor">
             <path d="M8 12C6.9 12 6 12.9 6 14V50C6 51.1 6.9 52 8 52H56C57.1 52 58 51.1 58 50V20C58 18.9 57.1 18 56 18H28L24 12H8Z"/>
           </svg>
-          <span>Папка пуста</span>
+          <span>${t('common_empty_folder')}</span>
         </div>
       `;
       console.log('Showing empty state');
       return;
     }
 
-    // Sort: folders first, then by name
     files.sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) {
         return a.isDirectory ? -1 : 1;
@@ -299,7 +283,6 @@ class FileManager {
     item.dataset.isDirectory = file.isDirectory;
     item.dataset.name = file.name;
 
-    // Add inline styles to ensure visibility
     item.style.cssText = 'display: grid; grid-template-columns: 1fr 100px 150px; gap: 16px; align-items: center; padding: 10px 16px; color: #ccc; font-size: 13px; border-bottom: 1px solid #2a2a2a;';
 
     const iconType = this.getFileIconType(file);
@@ -356,17 +339,16 @@ class FileManager {
     const now = new Date();
     const diff = now - date;
 
-    if (diff < 86400000) { // Less than 24 hours
-      return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    if (diff < 86400000) {
+      return date.toLocaleTimeString(window.localizationManager ? (window.localizationManager.getLanguage() === 'en' ? 'en-US' : 'ru-RU') : 'ru-RU', { hour: '2-digit', minute: '2-digit' });
     }
 
-    return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return date.toLocaleDateString(window.localizationManager ? (window.localizationManager.getLanguage() === 'en' ? 'en-US' : 'ru-RU') : 'ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
   }
 
   handleFileListClick(e) {
     const item = e.target.closest('.file-item');
     if (!item) {
-      // Clicked on empty space
       if (!e.ctrlKey) {
         this.clearSelection();
       }
@@ -374,7 +356,6 @@ class FileManager {
     }
 
     if (e.ctrlKey) {
-      // Toggle selection
       if (this.selectedItems.has(item.dataset.path)) {
         this.selectedItems.delete(item.dataset.path);
         item.classList.remove('selected');
@@ -383,12 +364,10 @@ class FileManager {
         item.classList.add('selected');
       }
     } else if (e.shiftKey && this.selectedItems.size > 0) {
-      // Range selection - TODO: implement
       this.clearSelection();
       this.selectedItems.add(item.dataset.path);
       item.classList.add('selected');
     } else {
-      // Single selection
       this.clearSelection();
       this.selectedItems.add(item.dataset.path);
       item.classList.add('selected');
@@ -409,9 +388,9 @@ class FileManager {
   }
 
   async openFile(filePath) {
-    const result = await ipcRenderer.invoke('open-file', filePath);
+    const result = await window.ipcRenderer.invoke('open-file', filePath);
     if (!result.success) {
-      await CustomDialog.alert(`Не удалось открыть файл: ${result.error}`, 'Ошибка');
+      await CustomDialog.alert(t('error_open_file', {error: result.error}), t('common_error_occurred'));
     }
   }
 
@@ -421,14 +400,12 @@ class FileManager {
     const item = e.target.closest('.file-item');
 
     if (item && !this.selectedItems.has(item.dataset.path)) {
-      // Right-clicked on non-selected item
       this.clearSelection();
       this.selectedItems.add(item.dataset.path);
       item.classList.add('selected');
       this.updateSelectionStatus();
     }
 
-    // Update paste button state
     const pasteItem = this.contextMenu.querySelector('[data-action="paste"]');
     if (pasteItem) {
       if (this.clipboard && this.clipboard.length > 0) {
@@ -438,7 +415,6 @@ class FileManager {
       }
     }
 
-    // Show menu
     this.contextMenu.style.left = e.clientX + 'px';
     this.contextMenu.style.top = e.clientY + 'px';
     this.contextMenu.classList.remove('hidden');
@@ -496,10 +472,10 @@ class FileManager {
     if (this.selectedItems.size === 0) return;
 
     const firstItem = Array.from(this.selectedItems)[0];
-    const result = await ipcRenderer.invoke('show-item-in-folder', firstItem);
+    const result = await window.ipcRenderer.invoke('show-item-in-folder', firstItem);
 
     if (!result.success) {
-      await CustomDialog.alert(`Ошибка: ${result.error}`, 'Ошибка');
+      await CustomDialog.alert(t('error_general', {error: result.error}), t('common_error_occurred'));
     }
   }
 
@@ -509,7 +485,6 @@ class FileManager {
     this.clipboard = Array.from(this.selectedItems);
     this.clipboardOperation = 'cut';
 
-    // Visual feedback
     this.fileListContent.querySelectorAll('.file-item').forEach(item => {
       if (this.clipboard.includes(item.dataset.path)) {
         item.classList.add('cut');
@@ -518,7 +493,7 @@ class FileManager {
       }
     });
 
-    this.updateStatus(`${this.clipboard.length} элемент(ов) вырезано`);
+    this.updateStatus(t('file_manager_items_cut', {count: this.clipboard.length}));
   }
 
   copySelected() {
@@ -527,18 +502,17 @@ class FileManager {
     this.clipboard = Array.from(this.selectedItems);
     this.clipboardOperation = 'copy';
 
-    // Remove cut visual feedback
     this.fileListContent.querySelectorAll('.file-item.cut').forEach(item => {
       item.classList.remove('cut');
     });
 
-    this.updateStatus(`${this.clipboard.length} элемент(ов) скопировано`);
+    this.updateStatus(t('file_manager_items_copied', {count: this.clipboard.length}));
   }
 
   async paste() {
     if (!this.clipboard || this.clipboard.length === 0) return;
 
-    const result = await ipcRenderer.invoke('file-operation', {
+    const result = await window.ipcRenderer.invoke('file-operation', {
       operation: this.clipboardOperation,
       sources: this.clipboard,
       destination: this.currentPath
@@ -550,9 +524,9 @@ class FileManager {
         this.clipboardOperation = null;
       }
       this.refresh();
-      this.updateStatus(result.message || 'Операция выполнена');
+      this.updateStatus(result.message || t('file_manager_operation_success'));
     } else {
-      await CustomDialog.alert(`Ошибка: ${result.error}`, 'Ошибка');
+      await CustomDialog.alert(t('error_general', {error: result.error}), t('common_error_occurred'));
     }
   }
 
@@ -576,7 +550,7 @@ class FileManager {
       const newName = input.value.trim();
 
       if (newName && newName !== item.dataset.name) {
-        const result = await ipcRenderer.invoke('rename-item', {
+        const result = await window.ipcRenderer.invoke('rename-item', {
           oldPath: itemPath,
           newName: newName
         });
@@ -584,7 +558,7 @@ class FileManager {
         if (result.success) {
           this.refresh();
         } else {
-          alert(`Ошибка переименования: ${result.error}`);
+          alert(t('error_rename', {error: result.error}));
           input.replaceWith(textElement);
         }
       } else {
@@ -607,20 +581,20 @@ class FileManager {
 
     const count = this.selectedItems.size;
     const confirmMsg = count === 1
-      ? 'Удалить выбранный элемент?'
-      : `Удалить выбранные элементы (${count})?`;
+      ? t('file_manager_delete_selected')
+      : t('file_manager_delete_multiple', {count});
 
     if (!confirm(confirmMsg)) return;
 
-    const result = await ipcRenderer.invoke('delete-items', {
+    const result = await window.ipcRenderer.invoke('delete-items', {
       items: Array.from(this.selectedItems)
     });
 
     if (result.success) {
       this.refresh();
-      this.updateStatus(`Удалено: ${count} элемент(ов)`);
+      this.updateStatus(t('file_manager_items_deleted', {count}));
     } else {
-      alert(`Ошибка удаления: ${result.error}`);
+      alert(t('error_delete', {error: result.error}));
     }
   }
 
@@ -628,17 +602,17 @@ class FileManager {
     if (this.selectedItems.size !== 1) return;
 
     const itemPath = Array.from(this.selectedItems)[0];
-    const result = await ipcRenderer.invoke('get-item-properties', itemPath);
+    const result = await window.ipcRenderer.invoke('get-item-properties', itemPath);
 
     if (result.success) {
       const props = result.properties;
       const message = `
-Имя: ${props.name}
-Путь: ${props.path}
-Тип: ${props.isDirectory ? 'Папка' : 'Файл'}
-Размер: ${props.isDirectory ? '-' : this.formatFileSize(props.size)}
-Создан: ${new Date(props.created).toLocaleString('ru-RU')}
-Изменён: ${new Date(props.modified).toLocaleString('ru-RU')}
+${t('file_manager_properties_name', {name: props.name})}
+${t('file_manager_properties_path', {path: props.path})}
+${t('file_manager_properties_type', {type: props.isDirectory ? t('common_folder') : t('common_file')})}
+${t('file_manager_properties_size', {size: props.isDirectory ? '-' : this.formatFileSize(props.size)})}
+${t('file_manager_properties_created', {date: new Date(props.created).toLocaleString(window.localizationManager ? (window.localizationManager.getLanguage() === 'en' ? 'en-US' : 'ru-RU') : 'ru-RU')})}
+${t('file_manager_properties_modified', {date: new Date(props.modified).toLocaleString(window.localizationManager ? (window.localizationManager.getLanguage() === 'en' ? 'en-US' : 'ru-RU') : 'ru-RU')})}
       `.trim();
 
       alert(message);
@@ -646,23 +620,22 @@ class FileManager {
   }
 
   async createNewFolder() {
-    const name = prompt('Введите имя новой папки:');
+    const name = prompt(t('file_manager_new_folder_prompt'));
     if (!name) return;
 
-    const result = await ipcRenderer.invoke('create-folder', {
+    const result = await window.ipcRenderer.invoke('create-folder', {
       path: this.currentPath,
       name: name
     });
 
     if (result.success) {
       this.refresh();
-      this.updateStatus(`Создана папка: ${name}`);
+      this.updateStatus(t('file_manager_folder_created', {name}));
     } else {
-      alert(`Ошибка создания папки: ${result.error}`);
+      alert(t('error_create_folder', {error: result.error}));
     }
   }
 
-  // Drag and Drop
   handleDragStart(e) {
     const item = e.target.closest('.file-item');
     if (!item) return;
@@ -715,7 +688,7 @@ class FileManager {
       const sources = JSON.parse(e.dataTransfer.getData('text/plain'));
       const operation = e.ctrlKey ? 'copy' : 'cut';
 
-      const result = await ipcRenderer.invoke('file-operation', {
+      const result = await window.ipcRenderer.invoke('file-operation', {
         operation: operation,
         sources: sources,
         destination: destination
@@ -723,18 +696,16 @@ class FileManager {
 
       if (result.success) {
         this.refresh();
-        this.updateStatus(result.message || 'Операция выполнена');
+        this.updateStatus(result.message || t('files_operation_done'));
       } else {
-        alert(`Ошибка: ${result.error}`);
+        alert(t('error_general', {error: result.error}));
       }
     } catch (err) {
       console.error('Drop error:', err);
     }
   }
 
-  // Keyboard shortcuts
   handleKeyDown(e) {
-    // Only process shortcuts when files tab is active
     const filesTab = document.getElementById('filesTab');
     if (!filesTab || !filesTab.classList.contains('active')) return;
 
@@ -786,7 +757,7 @@ class FileManager {
     if (this.selectedItems.size === 0) {
       this.fileStatusSelection.textContent = '';
     } else {
-      this.fileStatusSelection.textContent = `Выбрано: ${this.selectedItems.size}`;
+      this.fileStatusSelection.textContent = t('files_selected_count', {count: this.selectedItems.size});
     }
   }
 
@@ -809,7 +780,6 @@ class FileManager {
   }
 }
 
-// Initialize immediately when script loads
 console.log('=== file-manager.js loaded ===');
 
 let fileManager;
@@ -840,18 +810,7 @@ function initFileManagerNow() {
   }
 }
 
-// Try to initialize on DOMContentLoaded
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOMContentLoaded event fired');
-    setTimeout(initFileManagerNow, 1000);
-  });
-} else {
-  console.log('DOM already loaded, initializing now');
-  setTimeout(initFileManagerNow, 1000);
-}
-
-// Export for manual initialization
 if (typeof window !== 'undefined') {
   window.initFileManagerNow = initFileManagerNow;
+  window.FileManager = FileManager;
 }

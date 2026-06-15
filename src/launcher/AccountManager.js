@@ -53,7 +53,6 @@ class AccountManager {
       throw new Error('Invalid username length (1-16 characters)');
     }
 
-    // Check if account already exists
     const exists = this.accounts.find(acc =>
       acc.type === 'local' && acc.username.toLowerCase() === username.toLowerCase()
     );
@@ -74,7 +73,6 @@ class AccountManager {
 
     this.accounts.push(account);
 
-    // Set as active if it's the first account
     if (this.accounts.length === 1) {
       this.activeAccountId = account.id;
     }
@@ -91,13 +89,11 @@ class AccountManager {
       throw new Error('Invalid Ely.by auth data');
     }
 
-    // Check if account already exists
     const exists = this.accounts.find(acc =>
       acc.type === 'ely' && acc.uuid === authData.uuid
     );
 
     if (exists) {
-      // Update existing account
       exists.username = authData.username;
       exists.accessToken = authData.accessToken;
       exists.refreshToken = authData.refreshToken;
@@ -122,7 +118,6 @@ class AccountManager {
 
     this.accounts.push(account);
 
-    // Set as active if it's the first account
     if (this.accounts.length === 1) {
       this.activeAccountId = account.id;
     }
@@ -143,7 +138,6 @@ class AccountManager {
 
     this.accounts.splice(index, 1);
 
-    // If removed account was active, set another one as active
     if (this.activeAccountId === accountId) {
       this.activeAccountId = this.accounts.length > 0 ? this.accounts[0].id : null;
     }

@@ -2,6 +2,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
 const AdmZip = require('adm-zip');
+const { bt } = require('../localization/backend-translations');
 
 class ModpackInstaller {
   constructor() {
@@ -14,42 +15,35 @@ class ModpackInstaller {
     try {
       console.log(`Installing modpack: ${modpackName} from ${modpackPath}`);
 
-      // Создаём имя для версии (убираем расширение .mrpack)
       const versionName = modpackName.replace('.mrpack', '');
       const versionDir = path.join(this.versionsDir, versionName);
 
-      // Проверяем существует ли уже такая версия
       if (await fs.pathExists(versionDir)) {
-        return { success: false, error: 'Модпак с таким именем уже установлен' };
+        return { success: false, error: bt('modpack_already_installed') };
       }
 
-      // Создаём директорию для версии
       await fs.ensureDir(versionDir);
 
-      // Распаковываем modpack
       const zip = new AdmZip(modpackPath);
       const zipEntries = zip.getEntries();
 
-      // Ищем manifest
       let manifest = null;
       const manifestEntry = zipEntries.find(e => e.entryName === 'modrinth.index.json');
 
       if (manifestEntry) {
         manifest = JSON.parse(manifestEntry.getData().toString('utf8'));
       } else {
-        return { success: false, error: 'Неверный формат модпака (отсутствует modrinth.index.json)' };
+        return { success: false, error: bt('modpack_invalid_format') };
       }
 
       console.log('Modpack manifest:', manifest);
 
-      // Получаем версию Minecraft из манифеста
       const minecraftVersion = manifest.dependencies?.minecraft || selectedVersion;
       const fabricVersion = manifest.dependencies?.['fabric-loader'];
       const forgeVersion = manifest.dependencies?.forge;
       const neoforgeVersion = manifest.dependencies?.neoforge;
       const quiltVersion = manifest.dependencies?.quilt;
 
-      // Определяем загрузчик
       let loader = 'vanilla';
       let loaderVersion = '';
 
@@ -67,7 +61,6 @@ class ModpackInstaller {
         loaderVersion = quiltVersion;
       }
 
-      // Автоматически скачиваем необходимую версию Java
       const JavaManager = require('./JavaManager');
       const javaManager = new JavaManager();
 
@@ -81,18 +74,16 @@ class ModpackInstaller {
         console.error('Failed to download required Java:', error);
         return {
           success: false,
-          error: `Не удалось скачать необходимую версию Java: ${error.message}`
+          error: bt('modpack_java_download_failed', {error: error.message})
         };
       }
 
-      // Формируем полное имя версии для установки базовой версии
       const fullVersionName = loader !== 'vanilla'
         ? `${minecraftVersion}-${loader}-${loaderVersion}`
         : minecraftVersion;
 
       console.log(`Need base version: ${fullVersionName}`);
 
-      // Проверяем есть ли уже установленная версия с таким именем
       let existingVersionDir = path.join(this.versionsDir, fullVersionName);
       let baseVersionDir = null;
       let actualVersionName = fullVersionName;
@@ -101,12 +92,10 @@ class ModpackInstaller {
         console.log(`Using existing base version: ${fullVersionName}`);
         baseVersionDir = existingVersionDir;
       } else {
-        // Ищем похожую версию с тем же загрузчиком И той же версией Minecraft
         console.log(`Base version ${fullVersionName} not found, looking for compatible version...`);
         const allVersions = await fs.readdir(this.versionsDir);
 
         for (const ver of allVersions) {
-          // Ищем версию с тем же загрузчиком и той же версией Minecraft
           if (loader !== 'vanilla' && ver.startsWith(`${minecraftVersion}-${loader}-`)) {
             const verDir = path.join(this.versionsDir, ver);
             const jsonPath = path.join(verDir, `${ver}.json`);
@@ -121,7 +110,6 @@ class ModpackInstaller {
           }
         }
 
-        // Если не нашли совместимую версию - скачиваем базовую
         if (!baseVersionDir) {
           console.log(`No compatible version found, downloading ${fullVersionName}...`);
 
@@ -129,7 +117,6 @@ class ModpackInstaller {
           const launcher = new MinecraftLauncher();
 
           try {
-            // Скачиваем полную версию (Minecraft + Loader) одним вызовом
             await launcher.downloadMinecraft(fullVersionName, (progress) => {
               console.log(`Download progress: ${progress.stage} - ${progress.progress || 0}%`);
             });
@@ -140,7 +127,7 @@ class ModpackInstaller {
             if (!await fs.pathExists(baseVersionDir)) {
               return {
                 success: false,
-                error: `Не удалось установить базовую версию ${fullVersionName}`
+                error: bt('modpack_base_install_failed', {version: fullVersionName})
               };
             }
 
@@ -149,27 +136,25 @@ class ModpackInstaller {
             console.error('Error installing base version:', error);
             return {
               success: false,
-              error: `Ошибка установки базовой версии: ${error.message}`
+              error: bt('modpack_base_install_error', {error: error.message})
             };
           }
         }
       }
 
-      // Копируем файлы версии (.json и .jar) в папку модпака
       const versionJsonSource = path.join(baseVersionDir, `${actualVersionName}.json`);
       const versionJarSource = path.join(baseVersionDir, `${actualVersionName}.jar`);
       const versionJsonTarget = path.join(versionDir, `${versionName}.json`);
       const versionJarTarget = path.join(versionDir, `${versionName}.jar`);
 
       if (await fs.pathExists(versionJsonSource)) {
-        // Копируем и модифицируем .json
         const versionJson = await fs.readJson(versionJsonSource);
         versionJson.id = versionName;
         await fs.writeJson(versionJsonTarget, versionJson, { spaces: 2 });
       } else {
         return {
           success: false,
-          error: `Не найден файл ${actualVersionName}.json`
+          error: bt('modpack_json_not_found', {name: actualVersionName})
         };
       }
 
@@ -178,11 +163,10 @@ class ModpackInstaller {
       } else {
         return {
           success: false,
-          error: `Не найден файл ${actualVersionName}.jar`
+          error: bt('modpack_jar_not_found', {name: actualVersionName})
         };
       }
 
-      // Извлекаем файлы модпака (overrides)
       const overridesPath = 'overrides/';
 
       for (const entry of zipEntries) {
@@ -194,11 +178,9 @@ class ModpackInstaller {
         }
       }
 
-      // Создаём папку для модов если её нет
       const modsDir = path.join(versionDir, 'mods');
       await fs.ensureDir(modsDir);
 
-      // Скачиваем моды из манифеста
       if (manifest.files && manifest.files.length > 0) {
         console.log(`Downloading ${manifest.files.length} mods...`);
 
@@ -209,7 +191,6 @@ class ModpackInstaller {
 
           await fs.ensureDir(path.dirname(filePath));
 
-          // Скачиваем файл
           const axios = require('axios');
           const response = await axios({
             method: 'get',
@@ -229,7 +210,6 @@ class ModpackInstaller {
         }
       }
 
-      // Создаём метаданные для версии
       const versionMeta = {
         name: versionName,
         minecraftVersion: minecraftVersion,
@@ -242,7 +222,6 @@ class ModpackInstaller {
 
       await fs.writeJson(path.join(versionDir, 'modpack.json'), versionMeta, { spaces: 2 });
 
-      // Добавляем версию в список изолированных
       const isolationSettingsPath = path.join(this.minecraftDir, 'isolation_settings.json');
       let isolatedVersions = [];
 
@@ -255,7 +234,6 @@ class ModpackInstaller {
         await fs.writeJson(isolationSettingsPath, isolatedVersions, { spaces: 2 });
       }
 
-      // Удаляем скачанный файл модпака
       await fs.remove(modpackPath);
 
       return {

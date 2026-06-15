@@ -8,6 +8,7 @@ const AccountManager = require('./launcher/AccountManager');
 const JavaManager = require('./launcher/JavaManager');
 const ModrinthAPI = require('./launcher/ModrinthAPI');
 const ModpackInstaller = require('./launcher/ModpackInstaller');
+const { bt } = require('./localization/backend-translations');
 
 let mainWindow;
 let welcomeWindow;
@@ -258,16 +259,13 @@ ipcMain.handle('open-instance-folder', async (event, versionId) => {
   const os = require('os');
   const fs = require('fs-extra');
 
-  // Проверяем является ли это модпаком
   const versionDir = path.join(os.homedir(), '.minecraft_custom', 'versions', versionId);
   const modpackJsonPath = path.join(versionDir, 'modpack.json');
 
   let folderToOpen;
   if (await fs.pathExists(modpackJsonPath)) {
-    // Это модпак - открываем папку в versions
     folderToOpen = versionDir;
   } else {
-    // Обычная версия - открываем папку в instances
     folderToOpen = path.join(os.homedir(), '.minecraft_custom', 'instances', versionId);
   }
 
@@ -366,7 +364,6 @@ ipcMain.handle('get-system-info', () => {
 });
 ipcMain.handle('get-stats', async () => await statsManager.getStats());
 
-// ==================== MEDIA TAB (SCREENSHOTS) ====================
 ipcMain.handle('get-screenshots', async () => {
   try {
     const fs = require('fs-extra');
@@ -416,7 +413,6 @@ ipcMain.handle('open-screenshots-folder', async () => {
   }
 });
 
-// ==================== TOOLS TAB (DIAGNOSTICS) ====================
 ipcMain.handle('check-integrity', async () => {
   try {
     const fs = require('fs-extra');
@@ -451,18 +447,18 @@ ipcMain.handle('check-integrity', async () => {
 
     if (missingFiles.length > 0) {
       const details = missingFiles.slice(0, 5).map(f => `• ${f}`).join('\n');
-      const more = missingFiles.length > 5 ? `\n\n...и еще ${missingFiles.length - 5} файлов` : '';
+      const more = missingFiles.length > 5 ? bt('integrity_files_more', {count: missingFiles.length - 5}) : '';
       return {
         success: true,
         type: 'error',
-        message: `⚠️ Обнаружены проблемы\n\nПроверено версий: ${checkedVersions}\nВсего файлов: ${totalFiles}\nОтсутствует: ${missingFiles.length}\n\nОтсутствующие файлы:\n${details}${more}`
+        message: bt('integrity_problems', {versions: checkedVersions, total: totalFiles, missing: missingFiles.length, details: details, more: more})
       };
     }
 
     return {
       success: true,
       type: 'success',
-      message: `✓ Все файлы в порядке!\n\nПроверено версий: ${checkedVersions}\nВсего файлов: ${totalFiles}\nПроблем не найдено`
+      message: bt('integrity_ok', {versions: checkedVersions, total: totalFiles})
     };
   } catch (error) {
     return { success: false, error: error.message };
@@ -477,7 +473,6 @@ ipcMain.handle('clear-cache', async () => {
 
     let freedSpace = 0;
 
-    // Очищаем natives
     const nativesDir = path.join(minecraftDir, 'natives');
     if (await fs.pathExists(nativesDir)) {
       const stat = await fs.stat(nativesDir);
@@ -485,7 +480,6 @@ ipcMain.handle('clear-cache', async () => {
       await fs.remove(nativesDir);
     }
 
-    // Очищаем временные файлы
     const tempDir = path.join(os.tmpdir(), 'minecraft_modpacks');
     if (await fs.pathExists(tempDir)) {
       const stat = await fs.stat(tempDir);
@@ -507,7 +501,6 @@ ipcMain.handle('optimize-settings', async () => {
     const cpuModel = cpus[0].model;
     const cpuCores = cpus.length;
 
-    // Оптимальные настройки в зависимости от RAM
     let recommendedMemory = 2048;
     let profile = 'balanced';
     let recommendation = '';
@@ -515,22 +508,21 @@ ipcMain.handle('optimize-settings', async () => {
     if (totalMemory >= 16384) {
       recommendedMemory = 8192;
       profile = 'high';
-      recommendation = '🚀 Максимальная производительность\nВаш ПК может запускать любые модпаки';
+      recommendation = bt('optimization_high');
     } else if (totalMemory >= 8192) {
       recommendedMemory = 4096;
       profile = 'balanced';
-      recommendation = '⚡ Оптимальный баланс производительности\nПодходит для большинства модпаков';
+      recommendation = bt('optimization_balanced');
     } else if (totalMemory >= 4096) {
       recommendedMemory = 2048;
       profile = 'low';
-      recommendation = '📊 Базовые настройки для стабильной работы\nЛегкие модпаки будут работать нормально';
+      recommendation = bt('optimization_low');
     } else {
       recommendedMemory = 1024;
       profile = 'minimal';
-      recommendation = '⚠️ Маломощный ПК\nРекомендуется играть без модов или с легкими модпаками';
+      recommendation = bt('optimization_minimal');
     }
 
-    // Сохраняем оптимизированные настройки
     const config = await launcher.getConfig();
     const oldMemory = config.memory || 2048;
     const oldProfile = config.optimizationProfile || 'balanced';
@@ -541,13 +533,13 @@ ipcMain.handle('optimize-settings', async () => {
 
     const changes = [];
     if (oldMemory !== recommendedMemory) {
-      changes.push(`Память: ${oldMemory} MB → ${recommendedMemory} MB`);
+      changes.push(bt('optimization_memory_change', {old: oldMemory, new: recommendedMemory}));
     }
     if (oldProfile !== profile) {
-      changes.push(`Профиль: ${oldProfile} → ${profile}`);
+      changes.push(bt('optimization_profile_change', {old: oldProfile, new: profile}));
     }
 
-    const details = `🖥️ Информация о системе:\n\nОЗУ: ${totalMemory} MB\nCPU: ${cpuModel}\nЯдер: ${cpuCores}\n\n✨ Применены изменения:\n\n${changes.length > 0 ? changes.join('\n') : '✓ Настройки уже оптимальны'}\n\n💡 Рекомендации:\n\n${recommendation}`;
+    const details = bt('optimization_system_info', {ram: totalMemory, cpu: cpuModel, cores: cpuCores, changes: changes.length > 0 ? changes.join('\n') : bt('optimization_already_optimal'), recommendation: recommendation});
 
     return {
       success: true,
@@ -776,7 +768,6 @@ ipcMain.handle('modrinth-install-modpack', async (event, projectId, downloadUrl,
 
     const tempFilePath = path.join(tempDir, fileName);
 
-    // Скачиваем modpack
     const downloadResult = await modrinthAPI.downloadFile(downloadUrl, tempFilePath, (progress) => {
       mainWindow.webContents.send('mod-download-progress', { fileName, ...progress });
     });
@@ -785,10 +776,8 @@ ipcMain.handle('modrinth-install-modpack', async (event, projectId, downloadUrl,
       return { success: false, error: downloadResult.error };
     }
 
-    // Выбираем подходящую версию Minecraft из доступных
     const selectedVersion = gameVersions && gameVersions.length > 0 ? gameVersions[0] : '1.21.1';
 
-    // Устанавливаем modpack
     const installResult = await modpackInstaller.installModpack(tempFilePath, fileName, selectedVersion);
 
     if (installResult.success) {
@@ -862,7 +851,6 @@ ipcMain.handle('modrinth-download-shader', async (event, downloadUrl, fileName, 
   }
 });
 
-// File Manager Handlers
 ipcMain.handle('get-minecraft-root', async () => {
   try {
     const os = require('os');
@@ -951,7 +939,7 @@ ipcMain.handle('file-operation', async (event, data) => {
       }
     }
 
-    return { success: true, message: `${sources.length} элемент(ов) ${operation === 'copy' ? 'скопировано' : 'перемещено'}` };
+    return { success: true, message: bt('file_operation_result', {count: sources.length, operation: operation === 'copy' ? bt('file_copied') : bt('file_moved')}) };
   } catch (error) {
     return { success: false, error: error.message };
   }

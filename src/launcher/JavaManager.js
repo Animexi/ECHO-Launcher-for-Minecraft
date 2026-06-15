@@ -4,6 +4,7 @@ const os = require('os');
 const axios = require('axios');
 const { execSync, exec } = require('child_process');
 const extract = require('extract-zip');
+const { bt } = require('../localization/backend-translations');
 
 class JavaManager {
   constructor() {
@@ -30,7 +31,6 @@ class JavaManager {
       }
     }
 
-    // Minecraft 26.x требует Java 25
     if (major >= 26) {
       return 25;
     }
@@ -88,18 +88,18 @@ class JavaManager {
 
       const isInstalled = await this.isJavaVersionInstalled(version);
       if (isInstalled) {
-        return { success: true, message: `Java ${version} уже установлена` };
+        return { success: true, message: bt('java_already_installed', {version: version}) };
       }
 
-      if (progressCallback) progressCallback({ stage: 'fetch', progress: 0, message: 'Получение информации о Java...' });
+      if (progressCallback) progressCallback({ stage: 'fetch', progress: 0, message: bt('java_fetching_info') });
 
       const downloadInfo = await this.getJavaDownloadUrl(version);
 
       if (!downloadInfo) {
-        throw new Error(`Не удалось найти Java ${version} для загрузки`);
+        throw new Error(bt('java_not_found_for_download', {version: version}));
       }
 
-      if (progressCallback) progressCallback({ stage: 'download', progress: 0, message: `Загрузка Java ${version}...` });
+      if (progressCallback) progressCallback({ stage: 'download', progress: 0, message: bt('java_downloading_progress', {version: version, progress: 0}) });
 
       const tempZip = path.join(this.javaDir, `java-${version}-temp.zip`);
 
@@ -113,7 +113,7 @@ class JavaManager {
             progressCallback({
               stage: 'download',
               progress: percentCompleted,
-              message: `Загрузка Java ${version}... ${percentCompleted}%`
+              message: bt('java_downloading_progress', {version: version, progress: percentCompleted})
             });
           }
         }
@@ -127,7 +127,7 @@ class JavaManager {
         writer.on('error', reject);
       });
 
-      if (progressCallback) progressCallback({ stage: 'extract', progress: 0, message: 'Извлечение файлов...' });
+      if (progressCallback) progressCallback({ stage: 'extract', progress: 0, message: bt('java_extracting') });
 
       const tempExtractDir = path.join(this.javaDir, `java-${version}-extract`);
       await extract(tempZip, { dir: tempExtractDir });
@@ -143,7 +143,7 @@ class JavaManager {
       }
 
       if (!jdkDir) {
-        throw new Error('JDK директория не найдена в архиве');
+        throw new Error(bt('java_jdk_not_found'));
       }
 
       const finalDir = path.join(this.javaDir, `jdk-${version}`);
@@ -152,9 +152,9 @@ class JavaManager {
       await fs.remove(tempZip);
       await fs.remove(tempExtractDir);
 
-      if (progressCallback) progressCallback({ stage: 'complete', progress: 100, message: `Java ${version} успешно установлена` });
+      if (progressCallback) progressCallback({ stage: 'complete', progress: 100, message: bt('java_install_complete', {version: version}) });
 
-      return { success: true, message: `Java ${version} успешно установлена`, path: path.join(finalDir, 'bin', 'java.exe') };
+      return { success: true, message: bt('java_install_complete', {version: version}), path: path.join(finalDir, 'bin', 'java.exe') };
     } catch (error) {
       console.error(`Failed to download Java ${version}:`, error);
       throw error;
@@ -214,13 +214,13 @@ class JavaManager {
     if (!isInstalled) {
       const systemJava = await this.getSystemJava();
       if (systemJava && systemJava.version === requiredVersion) {
-        return { success: true, message: `Используется системная Java ${requiredVersion}`, path: 'java' };
+        return { success: true, message: bt('java_using_system', {version: requiredVersion}), path: 'java' };
       }
 
       return await this.downloadJava(requiredVersion, progressCallback);
     }
 
-    return { success: true, message: `Java ${requiredVersion} уже установлена` };
+    return { success: true, message: bt('java_already_installed', {version: requiredVersion}) };
   }
 
   async getJavaForMinecraft(minecraftVersion) {
@@ -261,7 +261,7 @@ class JavaManager {
         return { success: true };
       }
 
-      return { success: false, error: 'Java версия не найдена' };
+      return { success: false, error: bt('java_not_found') };
     } catch (error) {
       return { success: false, error: error.message };
     }

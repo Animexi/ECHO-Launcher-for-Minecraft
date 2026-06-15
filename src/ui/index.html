@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ECHO Launcher</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="dialog.css">
   <link rel="stylesheet" href="file-manager-styles.css">
@@ -44,56 +47,56 @@
           <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
             <path d="M5 3L15 10L5 17V3Z"/>
           </svg>
-          <span>Играть</span>
+          <span data-i18n="tab_play">Играть</span>
         </button>
         <button class="tab-btn" data-tab="versions">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
             <path d="M3 4H17V6H3V4ZM3 9H17V11H3V9ZM3 14H17V16H3V14Z"/>
           </svg>
-          <span>Версии</span>
+          <span data-i18n="tab_versions">Версии</span>
         </button>
         <button class="tab-btn" data-tab="stats">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
             <path d="M2 18V10H6V18H2ZM8 18V2H12V18H8ZM14 18V6H18V18H14Z"/>
           </svg>
-          <span>Статистика</span>
+          <span data-i18n="tab_stats">Статистика</span>
         </button>
         <button class="tab-btn" data-tab="accounts">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
             <path d="M10 2C5.6 2 2 5.6 2 10C2 14.4 5.6 18 10 18C14.4 18 18 14.4 18 10C18 5.6 14.4 2 10 2ZM10 5C11.1 5 12 5.9 12 7C12 8.1 11.1 9 10 9C8.9 9 8 8.1 8 7C8 5.9 8.9 5 10 5ZM10 16C8 16 6.3 14.8 5.5 13C5.5 11.3 8.7 10.3 10 10.3C11.3 10.3 14.5 11.3 14.5 13C13.7 14.8 12 16 10 16Z"/>
           </svg>
-          <span>Аккаунты</span>
+          <span data-i18n="tab_accounts">Аккаунты</span>
         </button>
         <button class="tab-btn" data-tab="mods">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
             <path d="M14 2H6C4.9 2 4 2.9 4 4V16C4 17.1 4.9 18 6 18H14C15.1 18 16 17.1 16 16V4C16 2.9 15.1 2 14 2ZM14 16H6V4H14V16ZM8 6H12V8H8V6ZM8 10H12V12H8V10Z"/>
           </svg>
-          <span>Моды</span>
+          <span data-i18n="tab_mods">Моды</span>
         </button>
         <button class="tab-btn" data-tab="media">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
             <path d="M4 3C2.9 3 2 3.9 2 5V15C2 16.1 2.9 17 4 17H16C17.1 17 18 16.1 18 15V5C18 3.9 17.1 3 16 3H4ZM4 15L7 11L9 13.5L12 9.5L16 15H4Z"/>
           </svg>
-          <span>Медиа</span>
+          <span data-i18n="tab_media">Медиа</span>
         </button>
         <button class="tab-btn" data-tab="tools">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
             <path d="M16.37 12.5L18 10.87L17.13 10L15.5 11.63L14.87 11L16.5 9.37L15.63 8.5L14 10.13L12.5 8.63L14.37 6.75L11.25 3.62L9.37 5.5L10.87 7L9.25 8.62L8.62 8L10.25 6.37L9.37 5.5L7.75 7.12L7.12 6.5L8.75 4.87L7.87 4L6.25 5.62L3.62 3L1 5.62L3.62 8.25L5.25 6.62L6.12 7.5L4.5 9.12L5.37 10L7 8.37L7.62 9L6 10.62L6.87 11.5L8.5 9.87L10 11.37L8.12 13.25L11.25 16.37L13.12 14.5L11.62 13L13.25 11.37L13.87 12L12.25 13.62L13.12 14.5L14.75 12.87L15.37 13.5L13.75 15.12L14.62 16L16.25 14.37L18.87 17L21.5 14.37L16.37 12.5Z"/>
           </svg>
-          <span>Инструменты</span>
+          <span data-i18n="tab_tools">Инструменты</span>
         </button>
         <button class="tab-btn" data-tab="settings">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="10" cy="10" r="3"/>
             <path d="M10 1v2m0 14v2M4.22 4.22l1.42 1.42m8.72 8.72l1.42 1.42M1 10h2m14 0h2M4.22 15.78l1.42-1.42m8.72-8.72l1.42-1.42"/>
           </svg>
-          <span>Настройки</span>
+          <span data-i18n="tab_settings">Настройки</span>
         </button>
         <button class="tab-btn" data-tab="files">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
             <path d="M4 2C2.9 2 2 2.9 2 4V16C2 17.1 2.9 18 4 18H16C17.1 18 18 17.1 18 16V8L12 2H4ZM4 4H11V9H16V16H4V4Z"/>
           </svg>
-          <span>Файлы</span>
+          <span data-i18n="tab_files">Файлы</span>
         </button>
       </div>
 
@@ -107,34 +110,34 @@
             </div>
             <div class="user-details">
               <h2 class="username" id="displayUsername">Player</h2>
-              <p class="user-subtitle">Готов к игре</p>
+              <p class="user-subtitle" data-i18n="play_ready">Готов к игре</p>
             </div>
           </div>
 
           <div class="running-instances" id="runningInstances" style="display: none;">
             <div class="instances-header">
-              <span>Запущенные версии:</span>
+              <span data-i18n="play_running_instances">Запущенные версии:</span>
             </div>
             <div class="instances-list" id="instancesList"></div>
           </div>
 
           <div class="version-selector">
-            <label>Выбранная версия:</label>
+            <label data-i18n="play_selected_version">Выбранная версия:</label>
             <div style="display: flex; gap: 8px;">
               <select id="versionSelect" class="styled-select" style="flex: 1;">
-                <option value="">Загрузка...</option>
+                <option value="" data-i18n="play_loading">Загрузка...</option>
               </select>
-              <button class="open-instance-btn" id="openInstanceBtn" title="Открыть папку версии">
+              <button class="open-instance-btn" id="openInstanceBtn" title="Открыть папку версии" data-i18n-title="context_show_in_explorer">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M2 3C1.45 3 1 3.45 1 4V12C1 12.55 1.45 13 2 13H14C14.55 13 15 12.55 15 12V5C15 4.45 14.55 4 14 4H7L6 3H2Z"/>
                 </svg>
               </button>
-              <button class="delete-version-btn-play" id="deleteVersionBtn" title="Удалить версию">
+              <button class="delete-version-btn-play" id="deleteVersionBtn" title="Удалить версию" data-i18n-title="version_delete_btn">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M3 4V14C3 14.55 3.45 15 4 15H12C12.55 15 13 14.55 13 14V4H3ZM6 13H5V6H6V13ZM8.5 13H7.5V6H8.5V13ZM11 13H10V6H11V13ZM13 2H10L9 1H7L6 2H3V3H13V2Z"/>
                 </svg>
               </button>
-              <button class="isolation-toggle-btn" id="isolationBtn" title="Переключить изоляцию">
+              <button class="isolation-toggle-btn" id="isolationBtn" title="Переключить изоляцию" data-i18n-title="isolation_enabled">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 2C4.7 2 2 4.7 2 8C2 11.3 4.7 14 8 14C11.3 14 14 11.3 14 8C14 4.7 11.3 2 8 2ZM8 12C5.8 12 4 10.2 4 8C4 5.8 5.8 4 8 4C10.2 4 12 5.8 12 8C12 10.2 10.2 12 8 12Z"/>
                 </svg>
@@ -142,18 +145,18 @@
             </div>
             <div class="isolation-status" id="isolationStatus">
               <span class="isolation-indicator"></span>
-              <span class="isolation-text">Общая папка</span>
+              <span class="isolation-text" data-i18n="play_shared_folder">Общая папка</span>
             </div>
           </div>
 
           <button class="play-button" id="playBtn">
-            <span class="play-button-text">Играть</span>
+            <span class="play-button-text" data-i18n="play_button">Играть</span>
             <div class="play-button-glow"></div>
           </button>
 
           <div class="download-progress hidden" id="downloadProgress">
             <div class="progress-info">
-              <span id="progressStage">Загрузка...</span>
+              <span id="progressStage" data-i18n="play_loading">Загрузка...</span>
               <span id="progressPercent">0%</span>
             </div>
             <div class="progress-bar">
@@ -166,8 +169,8 @@
       <div class="tab-content" id="versionsTab">
         <div class="versions-section">
           <div class="section-header">
-            <h2>Доступные версии</h2>
-            <input type="text" id="versionSearch" class="search-input" placeholder="Поиск версий...">
+            <h2 data-i18n="versions_title">Доступные версии</h2>
+            <input type="text" id="versionSearch" class="search-input" placeholder="Поиск версий..." data-i18n="versions_search">
           </div>
 
           <div class="version-filters">
@@ -177,86 +180,85 @@
             <button class="filter-btn" data-filter="fabric">Fabric</button>
             <button class="filter-btn" data-filter="quilt">Quilt</button>
             <button class="filter-btn" data-filter="optifine">OptiFine</button>
-            <button class="filter-btn" data-filter="all">Все</button>
+            <button class="filter-btn" data-filter="all" data-i18n="common_all">Все</button>
           </div>
 
           <div class="versions-list" id="versionsList">
-            <div class="loading-spinner">Загрузка версий...</div>
+            <div class="loading-spinner" data-i18n="versions_loading">Загрузка версий...</div>
           </div>
         </div>
       </div>
 
       <div class="tab-content" id="statsTab">
         <div class="stats-section">
-          <h2>Статистика игры</h2>
-
           <div class="stats-overview">
-            <div class="stat-card">
+            <div class="stat-card stat-card-time">
               <div class="stat-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
-                  <path d="M12 6v6l4 2"/>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                  <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
               </div>
               <div class="stat-info">
-                <div class="stat-label">Общее время</div>
                 <div class="stat-value" id="totalPlaytime">0 ч 0 м</div>
+                <div class="stat-label" data-i18n="stats_total_time">Общее время</div>
               </div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card stat-card-launches">
               <div class="stat-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M5 3L19 12L5 21V3Z"/>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M5 3L19 12L5 21V3Z" fill="currentColor"/>
                 </svg>
               </div>
               <div class="stat-info">
-                <div class="stat-label">Всего запусков</div>
                 <div class="stat-value" id="totalLaunches">0</div>
+                <div class="stat-label" data-i18n="stats_total_launches">Всего запусков</div>
               </div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card stat-card-favorite">
               <div class="stat-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2L15 8L22 9L17 14L18 22L12 18L6 22L7 14L2 9L9 8L12 2Z"/>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2L15 8L22 9L17 14L18 22L12 18L6 22L7 14L2 9L9 8L12 2Z" fill="currentColor"/>
                 </svg>
               </div>
               <div class="stat-info">
-                <div class="stat-label">Любимая версия</div>
                 <div class="stat-value" id="favoriteVersion">-</div>
+                <div class="stat-label" data-i18n="stats_favorite_version">Любимая версия</div>
               </div>
             </div>
           </div>
 
-          <h3>История запусков</h3>
-          <div class="launch-history" id="launchHistory">
-            <div class="empty-state">История запусков пуста</div>
-          </div>
-
-          <h3>Статистика по версиям</h3>
+          <h3 data-i18n="stats_by_version">Статистика по версиям</h3>
           <div class="version-stats" id="versionStats">
-            <div class="empty-state">Нет данных</div>
+            <div class="empty-state">
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                <rect x="8" y="8" width="32" height="32" rx="4" stroke="currentColor" stroke-width="2" opacity="0.3"/>
+                <path d="M16 24h16M24 16v16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+              </svg>
+              <p data-i18n="stats_no_data">Нет данных</p>
+            </div>
           </div>
         </div>
       </div>
 
       <div class="tab-content" id="accountsTab">
         <div class="accounts-section">
-          <h2>Управление аккаунтами</h2>
+          <h2 data-i18n="accounts_title">Управление аккаунтами</h2>
 
           <div class="accounts-container">
             <div class="accounts-list-container">
               <div class="section-header">
-                <h3>Ваши аккаунты</h3>
+                <h3 data-i18n="accounts_your_accounts">Ваши аккаунты</h3>
                 <button class="add-account-btn" id="addAccountBtn">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M8 2V14M2 8H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                   </svg>
-                  <span>Добавить</span>
+                  <span data-i18n="accounts_add">Добавить</span>
                 </button>
               </div>
 
               <div class="accounts-list" id="accountsList">
-                <div class="empty-state">Нет добавленных аккаунтов</div>
+                <div class="empty-state" data-i18n="accounts_empty">Нет добавленных аккаунтов</div>
               </div>
             </div>
 
@@ -266,7 +268,7 @@
                   <circle cx="32" cy="32" r="30" fill="#2a2a2a"/>
                   <path d="M32 8C18.7 8 8 18.7 8 32C8 45.3 18.7 56 32 56C45.3 56 56 45.3 56 32C56 18.7 45.3 8 32 8ZM32 16C36.4 16 40 19.6 40 24C40 28.4 36.4 32 32 32C27.6 32 24 28.4 24 24C24 19.6 27.6 16 32 16ZM32 52C25.3 52 19.5 48.4 16 43C16 36.7 28.7 33 32 33C35.3 33 48 36.7 48 43C44.5 48.4 38.7 52 32 52Z" fill="#666"/>
                 </svg>
-                <p>Выберите аккаунт или добавьте новый</p>
+                <p data-i18n="accounts_select">Выберите аккаунт или добавьте новый</p>
               </div>
 
               <div class="account-details hidden" id="accountDetails">
@@ -277,8 +279,8 @@
                     </svg>
                   </div>
                   <div class="account-info-large">
-                    <h3 id="accountNameLarge">Имя аккаунта</h3>
-                    <div class="account-type-badge" id="accountTypeBadge">Локальный</div>
+                    <h3 id="accountNameLarge" data-i18n="account_username">Имя аккаунта</h3>
+                    <div class="account-type-badge" id="accountTypeBadge" data-i18n="accounts_local">Локальный</div>
                     <div class="account-uuid" id="accountUuidDisplay">UUID: -</div>
                   </div>
                 </div>
@@ -288,26 +290,26 @@
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                       <path d="M6 11L2 7L3.5 5.5L6 8L12.5 1.5L14 3L6 11Z"/>
                     </svg>
-                    <span>Выбрать для игры</span>
+                    <span data-i18n="accounts_select_btn">Выбрать для игры</span>
                   </button>
                   <button class="account-action-btn" id="editAccountBtn">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                       <path d="M2 12V14H4L11.5 6.5L9.5 4.5L2 12ZM13.5 4.5L14.5 3.5C14.8 3.2 14.8 2.7 14.5 2.4L13.6 1.5C13.3 1.2 12.8 1.2 12.5 1.5L11.5 2.5L13.5 4.5Z"/>
                     </svg>
-                    <span>Изменить скин</span>
+                    <span data-i18n="accounts_edit_skin">Изменить скин</span>
                   </button>
                   <button class="account-action-btn danger" id="removeAccountBtn">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                       <path d="M4 14C4 15.1 4.9 16 6 16H10C11.1 16 12 15.1 12 14V4H4V14ZM13 1H10.5L9.5 0H6.5L5.5 1H3V3H13V1Z"/>
                     </svg>
-                    <span>Удалить</span>
+                    <span data-i18n="accounts_remove">Удалить</span>
                   </button>
                 </div>
 
                 <div class="skin-preview-section">
-                  <h4>Предпросмотр скина</h4>
+                  <h4 data-i18n="account_skin_preview">Предпросмотр скина</h4>
                   <div class="skin-preview-large" id="skinPreviewLarge">
-                    <div class="skin-placeholder">Нет скина</div>
+                    <div class="skin-placeholder" data-i18n="accounts_no_skin">Нет скина</div>
                   </div>
                   <input type="file" id="skinFileInput" accept=".png" style="display: none;">
                 </div>
@@ -320,27 +322,27 @@
       <div class="tab-content" id="modsTab">
         <div class="mods-section">
           <div class="mods-header">
-            <h2>Контент из Modrinth</h2>
+            <h2 data-i18n="mods_header">Контент из Modrinth</h2>
 
             <!-- Подвкладки для типов контента -->
             <div class="content-type-tabs">
-              <button class="content-type-btn active" data-content-type="mod">Моды</button>
-              <button class="content-type-btn" data-content-type="modpack">Сборки</button>
-              <button class="content-type-btn" data-content-type="resourcepack">Ресурс-паки</button>
-              <button class="content-type-btn" data-content-type="shader">Шейдеры</button>
+              <button class="content-type-btn active" data-content-type="mod" data-i18n="mods_type_mod_tab">Моды</button>
+              <button class="content-type-btn" data-content-type="modpack" data-i18n="mods_type_modpack_tab">Сборки</button>
+              <button class="content-type-btn" data-content-type="resourcepack" data-i18n="mods_type_resourcepack_tab">Ресурс-паки</button>
+              <button class="content-type-btn" data-content-type="shader" data-i18n="mods_type_shader_tab">Шейдеры</button>
             </div>
 
             <div class="mods-filters">
               <div class="filter-group">
-                <label>Версия Minecraft:</label>
+                <label data-i18n="mods_mc_version_label">Версия Minecraft:</label>
                 <select id="modsVersionFilter" class="styled-select">
-                  <option value="">Все версии</option>
+                  <option value="" data-i18n="mods_all_versions_option">Все версии</option>
                 </select>
               </div>
               <div class="filter-group" id="loaderFilterGroup">
-                <label>Загрузчик:</label>
+                <label data-i18n="mods_loader_label">Загрузчик:</label>
                 <select id="modsLoaderFilter" class="styled-select">
-                  <option value="">Все</option>
+                  <option value="" data-i18n="mods_filter_all">Все</option>
                   <option value="forge">Forge</option>
                   <option value="neoforge">NeoForge</option>
                   <option value="fabric">Fabric</option>
@@ -348,30 +350,30 @@
                 </select>
               </div>
               <div class="filter-group">
-                <label>Сортировка:</label>
+                <label data-i18n="mods_sort_label">Сортировка:</label>
                 <select id="modsSortFilter" class="styled-select">
-                  <option value="relevance">По релевантности</option>
-                  <option value="downloads">По загрузкам</option>
-                  <option value="follows">По подпискам</option>
-                  <option value="newest">Новые</option>
-                  <option value="updated">Обновлённые</option>
+                  <option value="relevance" data-i18n="mods_sort_relevance_option">По релевантности</option>
+                  <option value="downloads" data-i18n="mods_sort_downloads_option">По загрузкам</option>
+                  <option value="follows" data-i18n="mods_sort_follows_option">По подпискам</option>
+                  <option value="newest" data-i18n="mods_sort_newest_option">Новые</option>
+                  <option value="updated" data-i18n="mods_sort_updated_option">Обновлённые</option>
                 </select>
               </div>
             </div>
           </div>
 
           <div class="mods-search">
-            <input type="text" id="modsSearchInput" class="search-input" placeholder="Поиск...">
+            <input type="text" id="modsSearchInput" class="search-input" placeholder="Поиск..." data-i18n="mods_search_placeholder">
             <button class="search-btn" id="modsSearchBtn">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M8 2C4.7 2 2 4.7 2 8C2 11.3 4.7 14 8 14C9.4 14 10.7 13.5 11.7 12.7L16 17L17 16L12.7 11.7C13.5 10.7 14 9.4 14 8C14 4.7 11.3 2 8 2ZM8 4C10.2 4 12 5.8 12 8C12 10.2 10.2 12 8 12C5.8 12 4 10.2 4 8C4 5.8 5.8 4 8 4Z"/>
               </svg>
-              <span>Искать</span>
+              <span data-i18n="mods_search_btn">Искать</span>
             </button>
           </div>
 
           <div class="mods-results" id="modsResults">
-            <div class="mod-loading">Загрузка популярного контента...</div>
+            <div class="mod-loading" data-i18n="mods_loading_content">Загрузка популярного контента...</div>
           </div>
 
           <div class="mods-pagination" id="modsPagination" style="display: none;">
@@ -379,11 +381,11 @@
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M10 2L4 8L10 14" stroke="currentColor" stroke-width="2" fill="none"/>
               </svg>
-              <span>Назад</span>
+              <span data-i18n="mods_pagination_back">Назад</span>
             </button>
-            <span class="pagination-info" id="modsPaginationInfo">Страница 1</span>
+            <span class="pagination-info" id="modsPaginationInfo" data-i18n="mods_pagination_info">Страница 1</span>
             <button class="pagination-btn" id="modsNextBtn">
-              <span>Вперёд</span>
+              <span data-i18n="mods_pagination_forward">Вперёд</span>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M6 2L12 8L6 14" stroke="currentColor" stroke-width="2" fill="none"/>
               </svg>
@@ -396,24 +398,24 @@
       <div class="tab-content" id="mediaTab">
         <div class="media-section">
           <div class="section-header">
-            <h2>Галерея скриншотов</h2>
+            <h2 data-i18n="media_header">Галерея скриншотов</h2>
             <div style="display: flex; gap: 8px;">
               <button class="btn-secondary" id="openScreenshotsFolder">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M2 3C1.45 3 1 3.45 1 4V12C1 12.55 1.45 13 2 13H14C14.55 13 15 12.55 15 12V5C15 4.45 14.55 4 14 4H7L6 3H2Z"/>
                 </svg>
-                Открыть папку
+                <span data-i18n="media_open_folder_btn">Открыть папку</span>
               </button>
               <button class="btn-secondary" id="refreshScreenshots">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M13.65 2.35C12.2 0.9 10.21 0 8 0C3.58 0 0 3.58 0 8H2C2 4.69 4.69 2 8 2C9.66 2 11.14 2.69 12.22 3.78L9 7H16V0L13.65 2.35ZM14 8C14 11.31 11.31 14 8 14C6.34 14 4.86 13.31 3.78 12.22L7 9H0V16L2.35 13.65C3.8 15.1 5.79 16 8 16C12.42 16 16 12.42 16 8H14Z"/>
                 </svg>
-                Обновить
+                <span data-i18n="media_refresh_btn">Обновить</span>
               </button>
             </div>
           </div>
           <div class="screenshots-grid" id="screenshotsGrid">
-            <div class="loading-spinner">Загрузка скриншотов...</div>
+            <div class="loading-spinner" data-i18n="media_loading_screenshots">Загрузка скриншотов...</div>
           </div>
         </div>
       </div>
@@ -422,20 +424,20 @@
       <div class="tab-content" id="toolsTab">
         <div class="tools-section">
           <div class="section-header">
-            <h2>Инструменты и диагностика</h2>
+            <h2 data-i18n="tools_header">Инструменты и диагностика</h2>
           </div>
 
           <!-- Diagnostics -->
           <div class="tool-category">
-            <h3>Диагностика</h3>
+            <h3 data-i18n="tools_diagnostics_header">Диагностика</h3>
             <div class="tool-buttons">
               <button class="tool-btn" id="checkIntegrityBtn">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2L2 7V13C2 18.55 6.84 23.74 12 25C17.16 23.74 22 18.55 22 13V7L12 2ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z"/>
                 </svg>
                 <div>
-                  <div class="tool-title">Проверка целостности</div>
-                  <div class="tool-desc">Проверить файлы игры</div>
+                  <div class="tool-title" data-i18n="tools_check_integrity_title">Проверка целостности</div>
+                  <div class="tool-desc" data-i18n="tools_check_integrity_desc">Проверить файлы игры</div>
                 </div>
               </button>
               <button class="tool-btn" id="clearCacheBtn">
@@ -443,8 +445,8 @@
                   <path d="M19 4H15.5L14.5 3H9.5L8.5 4H5V6H19V4ZM6 19C6 20.1 6.9 21 8 21H16C17.1 21 18 20.1 18 19V7H6V19Z"/>
                 </svg>
                 <div>
-                  <div class="tool-title">Очистка кеша</div>
-                  <div class="tool-desc">Удалить временные файлы</div>
+                  <div class="tool-title" data-i18n="tools_clear_cache_title">Очистка кеша</div>
+                  <div class="tool-desc" data-i18n="tools_clear_cache_desc">Удалить временные файлы</div>
                 </div>
               </button>
               <button class="tool-btn" id="optimizeBtn">
@@ -452,8 +454,8 @@
                   <path d="M3 17V19H9V17H3ZM3 5V7H13V5H3ZM13 21V19H21V17H13V15H11V21H13ZM7 9V11H3V13H7V15H9V9H7ZM21 13V11H11V13H21ZM15 9H17V7H21V5H17V3H15V9Z"/>
                 </svg>
                 <div>
-                  <div class="tool-title">Оптимизация</div>
-                  <div class="tool-desc">Подобрать настройки под ПК</div>
+                  <div class="tool-title" data-i18n="tools_optimize_title">Оптимизация</div>
+                  <div class="tool-desc" data-i18n="tools_optimize_desc">Подобрать настройки под ПК</div>
                 </div>
               </button>
             </div>
@@ -461,23 +463,23 @@
 
           <!-- Logs -->
           <div class="tool-category">
-            <h3>Логи и отладка</h3>
+            <h3 data-i18n="tools_logs_header">Логи и отладка</h3>
             <div class="logs-controls">
               <button class="btn-secondary" id="openLogsFolder">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M2 3C1.45 3 1 3.45 1 4V12C1 12.55 1.45 13 2 13H14C14.55 13 15 12.55 15 12V5C15 4.45 14.55 4 14 4H7L6 3H2Z"/>
                 </svg>
-                Открыть папку логов
+                <span data-i18n="tools_open_logs_btn">Открыть папку логов</span>
               </button>
               <button class="btn-secondary" id="analyzeLogs">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M15 14L11 10C11.8 9 12.3 7.6 12.3 6.2C12.3 2.8 9.5 0 6.2 0C2.8 0 0 2.8 0 6.2C0 9.5 2.8 12.3 6.2 12.3C7.6 12.3 9 11.8 10 11L14 15L15 14ZM2 6.2C2 3.9 3.9 2 6.2 2C8.4 2 10.3 3.9 10.3 6.2C10.3 8.4 8.4 10.3 6.2 10.3C3.9 10.3 2 8.4 2 6.2Z"/>
                 </svg>
-                Анализировать
+                <span data-i18n="tools_analyze_btn">Анализировать</span>
               </button>
             </div>
             <div class="logs-viewer" id="logsViewer">
-              <div class="logs-placeholder">Выберите "Анализировать" для просмотра последних логов</div>
+              <div class="logs-placeholder" data-i18n="tools_logs_placeholder">Выберите "Анализировать" для просмотра последних логов</div>
             </div>
           </div>
         </div>
@@ -485,22 +487,33 @@
 
       <div class="tab-content" id="settingsTab">
         <div class="settings-section">
-          <h2>Настройки лаунчера</h2>
+          <h2 data-i18n="settings_title">Настройки лаунчера</h2>
 
           <div class="setting-group">
             <label>
-              <span>Информация о системе</span>
-              <span class="setting-description">Характеристики вашего ПК</span>
+              <span data-i18n="settings_language">Язык интерфейса</span>
+              <span class="setting-description" data-i18n="settings_language_desc">Выберите язык лаунчера</span>
+            </label>
+            <select id="languageSelect" class="styled-select">
+              <option value="ru">RU — Русский</option>
+              <option value="en">EN — English</option>
+            </select>
+          </div>
+
+          <div class="setting-group">
+            <label>
+              <span data-i18n="settings_system_info">Информация о системе</span>
+              <span class="setting-description" data-i18n="settings_system_info_desc">Характеристики вашего ПК</span>
             </label>
             <div class="system-info" id="systemInfo">
-              <div class="system-info-loading">Загрузка...</div>
+              <div class="system-info-loading" data-i18n="common_loading">Загрузка...</div>
             </div>
           </div>
 
           <div class="setting-group" style="display: none;">
             <label>
-              <span>Аккаунт Ely.by</span>
-              <span class="setting-description">Войдите для автоматического получения скинов</span>
+              <span data-i18n="settings_ely_account">Аккаунт Ely.by</span>
+              <span class="setting-description" data-i18n="settings_ely_desc">Войдите для автоматического получения скинов</span>
             </label>
             <div class="ely-auth-container" id="elyAuthContainer">
               <div class="ely-not-logged-in" id="elyNotLoggedIn">
@@ -512,15 +525,15 @@
                       </svg>
                     </div>
                     <div class="info-content">
-                      <h3>Преимущества входа через Ely.by:</h3>
+                      <h3 data-i18n="settings_ely_benefits">Преимущества входа через Ely.by:</h3>
                       <ol class="instruction-list">
-                        <li>Автоматическая загрузка вашего скина</li>
-                        <li>Не нужно вручную вводить ник</li>
-                        <li>Скины применяются мгновенно</li>
-                        <li>Поддержка HD скинов (64x64)</li>
+                        <li data-i18n="settings_ely_benefit1">Автоматическая загрузка вашего скина</li>
+                        <li data-i18n="settings_ely_benefit2">Не нужно вручную вводить ник</li>
+                        <li data-i18n="settings_ely_benefit3">Скины применяются мгновенно</li>
+                        <li data-i18n="settings_ely_benefit4">Поддержка HD скинов (64x64)</li>
                       </ol>
                       <div class="ely-note">
-                        <strong>Безопасно:</strong> Мы используем официальный OAuth протокол Ely.by
+                        <strong data-i18n="settings_ely_safe">Безопасно:</strong> <span data-i18n="settings_ely_safe_desc">Мы используем официальный OAuth протокол Ely.by</span>
                       </div>
                     </div>
                   </div>
@@ -529,7 +542,7 @@
                   <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M10 2C5.6 2 2 5.6 2 10C2 14.4 5.6 18 10 18C14.4 18 18 14.4 18 10C18 5.6 14.4 2 10 2ZM10 5C11.1 5 12 5.9 12 7C12 8.1 11.1 9 10 9C8.9 9 8 8.1 8 7C8 5.9 8.9 5 10 5ZM10 16C8 16 6.3 14.8 5.5 13C5.5 11.3 8.7 10.3 10 10.3C11.3 10.3 14.5 11.3 14.5 13C13.7 14.8 12 16 10 16Z"/>
                   </svg>
-                  <span>Войти через Ely.by</span>
+                  <span data-i18n="settings_ely_login_btn">Войти через Ely.by</span>
                 </button>
               </div>
               <div class="ely-logged-in hidden" id="elyLoggedIn">
@@ -541,14 +554,14 @@
                     </svg>
                   </div>
                   <div class="ely-account-details">
-                    <div class="ely-account-username" id="elyAccountUsername">Загрузка...</div>
+                    <div class="ely-account-username" id="elyAccountUsername" data-i18n="common_loading">Загрузка...</div>
                     <div class="ely-account-email" id="elyAccountEmail">-</div>
                     <div class="ely-account-status">
                       <span class="ely-status-indicator"></span>
-                      <span class="ely-status-text">Авторизован</span>
+                      <span class="ely-status-text" data-i18n="settings_ely_authorized">Авторизован</span>
                     </div>
                   </div>
-                  <button class="ely-logout-btn" id="elyLogoutBtn">Выйти</button>
+                  <button class="ely-logout-btn" id="elyLogoutBtn" data-i18n="settings_ely_logout_btn">Выйти</button>
                 </div>
               </div>
             </div>
@@ -556,16 +569,16 @@
 
           <div class="setting-group" style="display: none;">
             <label for="usernameInput">
-              <span>Никнейм</span>
-              <span class="setting-description">Ваше имя в игре</span>
+              <span data-i18n="settings_username">Никнейм</span>
+              <span class="setting-description" data-i18n="settings_username_desc">Ваше имя в игре</span>
             </label>
-            <input type="text" id="usernameInput" class="styled-input" placeholder="Введите никнейм" maxlength="16">
+            <input type="text" id="usernameInput" class="styled-input" placeholder="Введите никнейм" data-i18n="settings_username_placeholder" maxlength="16">
           </div>
 
           <div class="setting-group">
             <label for="memoryInput">
-              <span>Выделенная RAM (MB)</span>
-              <span class="setting-description">Рекомендуется: 2048-4096 MB</span>
+              <span data-i18n="settings_memory">Выделенная RAM (MB)</span>
+              <span class="setting-description" data-i18n="settings_memory_desc">Рекомендуется: 2048-4096 MB</span>
             </label>
             <div class="memory-slider-container">
               <input type="range" id="memorySlider" class="styled-slider" min="512" max="16384" step="256" value="2048">
@@ -575,38 +588,38 @@
 
           <div class="setting-group">
             <label>
-              <span>Оптимизация производительности</span>
-              <span class="setting-description">JVM аргументы для улучшения FPS</span>
+              <span data-i18n="settings_optimization">Оптимизация производительности</span>
+              <span class="setting-description" data-i18n="settings_optimization_desc">JVM аргументы для улучшения FPS</span>
             </label>
             <div class="optimization-options">
               <button class="optimization-btn active" data-profile="balanced">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <circle cx="8" cy="8" r="6"/>
                 </svg>
-                <span>Сбалансированный</span>
-                <div class="optimization-desc">Оптимальные настройки для большинства ПК</div>
+                <span data-i18n="settings_opt_balanced">Сбалансированный</span>
+                <div class="optimization-desc" data-i18n="settings_opt_balanced_desc">Оптимальные настройки для большинства ПК</div>
               </button>
               <button class="optimization-btn" data-profile="performance">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 2L10 6L14 7L11 10L12 14L8 12L4 14L5 10L2 7L6 6L8 2Z"/>
                 </svg>
-                <span>Максимум FPS</span>
-                <div class="optimization-desc">Агрессивная оптимизация GC, минимум лагов</div>
+                <span data-i18n="settings_opt_performance">Максимум FPS</span>
+                <div class="optimization-desc" data-i18n="settings_opt_performance_desc">Агрессивная оптимизация GC, минимум лагов</div>
               </button>
               <button class="optimization-btn" data-profile="potato">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M3 3H13V13H3V3Z"/>
                 </svg>
-                <span>Слабый ПК</span>
-                <div class="optimization-desc">Консервативные настройки, меньше нагрузка</div>
+                <span data-i18n="settings_opt_potato">Слабый ПК</span>
+                <div class="optimization-desc" data-i18n="settings_opt_potato_desc">Консервативные настройки, меньше нагрузка</div>
               </button>
             </div>
           </div>
 
           <div class="setting-group">
             <label>
-              <span>Управление Java</span>
-              <span class="setting-description">Версии Java для разных версий Minecraft</span>
+              <span data-i18n="settings_java_management">Управление Java</span>
+              <span class="setting-description" data-i18n="settings_java_management_desc">Версии Java для разных версий Minecraft</span>
             </label>
             <div class="java-info-card">
               <div class="info-icon">
@@ -615,22 +628,22 @@
                 </svg>
               </div>
               <div class="info-content">
-                <h4>Требования Java для Minecraft:</h4>
+                <h4 data-i18n="settings_java_requirements">Требования Java для Minecraft:</h4>
                 <ul class="java-requirements-list">
-                  <li><strong>Java 8:</strong> Minecraft 1.16 и старше</li>
-                  <li><strong>Java 17:</strong> Minecraft 1.17 - 1.20.4</li>
-                  <li><strong>Java 21:</strong> Minecraft 1.20.5 и новее</li>
+                  <li data-i18n="settings_java_8_req"><strong>Java 8:</strong> Minecraft 1.16 и старше</li>
+                  <li data-i18n="settings_java_17_req"><strong>Java 17:</strong> Minecraft 1.17 - 1.20.4</li>
+                  <li data-i18n="settings_java_21_req"><strong>Java 21:</strong> Minecraft 1.20.5 и новее</li>
                 </ul>
               </div>
             </div>
             <div class="java-manager" id="javaManager">
               <div class="java-versions-list" id="javaVersionsList">
-                <div class="system-info-loading">Загрузка информации о Java...</div>
+                <div class="system-info-loading" data-i18n="settings_java_loading">Загрузка информации о Java...</div>
               </div>
             </div>
             <div class="java-download-progress hidden" id="javaDownloadProgress">
               <div class="progress-info">
-                <span id="javaProgressStage">Загрузка Java...</span>
+                <span id="javaProgressStage" data-i18n="java_downloading">Загрузка Java...</span>
                 <span id="javaProgressPercent">0%</span>
               </div>
               <div class="progress-bar">
@@ -641,23 +654,23 @@
 
           <div class="setting-group">
             <label>
-              <span>Выбор видеокарты</span>
-              <span class="setting-description">Выберите GPU для запуска Minecraft</span>
+              <span data-i18n="settings_gpu_selection">Выбор видеокарты</span>
+              <span class="setting-description" data-i18n="settings_gpu_desc">Выберите GPU для запуска Minecraft</span>
             </label>
             <div class="gpu-selection" id="gpuSelection">
-              <div class="system-info-loading">Загрузка...</div>
+              <div class="system-info-loading" data-i18n="settings_gpu_loading">Загрузка...</div>
             </div>
           </div>
 
           <button class="save-button" id="saveSettingsBtn">
-            <span>Сохранить настройки</span>
+            <span data-i18n="settings_save">Сохранить настройки</span>
           </button>
 
           <div class="save-notification hidden" id="saveNotification">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M6 11L2 7L3.5 5.5L6 8L12.5 1.5L14 3L6 11Z"/>
             </svg>
-            <span>Настройки сохранены</span>
+            <span data-i18n="settings_saved">Настройки сохранены</span>
           </div>
         </div>
       </div>
@@ -667,22 +680,22 @@
           <!-- Toolbar -->
           <div class="file-manager-toolbar">
             <div class="file-manager-navigation">
-              <button class="nav-btn" id="navBackBtn" disabled title="Назад">
+              <button class="nav-btn" id="navBackBtn" disabled title="Назад" data-i18n-title="context_back">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M10 2L4 8L10 14" stroke="currentColor" stroke-width="2" fill="none"/>
                 </svg>
               </button>
-              <button class="nav-btn" id="navForwardBtn" disabled title="Вперёд">
+              <button class="nav-btn" id="navForwardBtn" disabled title="Вперёд" data-i18n-title="context_forward">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M6 2L12 8L6 14" stroke="currentColor" stroke-width="2" fill="none"/>
                 </svg>
               </button>
-              <button class="nav-btn" id="navUpBtn" disabled title="На уровень выше">
+              <button class="nav-btn" id="navUpBtn" disabled title="На уровень выше" data-i18n-title="context_up">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 12V4M4 8L8 4L12 8" stroke="currentColor" stroke-width="2" fill="none"/>
                 </svg>
               </button>
-              <button class="nav-btn" id="navRefreshBtn" title="Обновить">
+              <button class="nav-btn" id="navRefreshBtn" title="Обновить" data-i18n-title="context_refresh">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M13.65 2.35C12.2 0.9 10.21 0 8 0C3.58 0 0 3.58 0 8H2C2 4.69 4.69 2 8 2C9.66 2 11.14 2.69 12.22 3.78L9 7H16V0L13.65 2.35Z"/>
                 </svg>
@@ -692,18 +705,18 @@
               <span class="breadcrumb-item active">Minecraft</span>
             </div>
             <div class="file-manager-actions">
-              <button class="action-btn" id="newFolderBtn" title="Создать папку">
+              <button class="action-btn" id="newFolderBtn" title="Создать папку" data-i18n-title="context_new_folder">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M2 3C1.45 3 1 3.45 1 4V12C1 12.55 1.45 13 2 13H14C14.55 13 15 12.55 15 12V5C15 4.45 14.55 4 14 4H7L6 3H2Z"/>
                   <path d="M8 6V10M6 8H10" stroke="white" stroke-width="1.5" fill="none"/>
                 </svg>
               </button>
-              <button class="action-btn" id="viewListBtn" class="active" title="Список">
+              <button class="action-btn" id="viewListBtn" class="active" title="Список" data-i18n-title="context_view_list">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M2 3H14V5H2V3ZM2 7H14V9H2V7ZM2 11H14V13H2V11Z"/>
                 </svg>
               </button>
-              <button class="action-btn" id="viewGridBtn" title="Сетка">
+              <button class="action-btn" id="viewGridBtn" title="Сетка" data-i18n-title="context_view_grid">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M2 2H6V6H2V2ZM8 2H12V6H8V2ZM2 8H6V12H2V8ZM8 8H12V12H8V8Z"/>
                 </svg>
@@ -719,29 +732,29 @@
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M2 3C1.45 3 1 3.45 1 4V12C1 12.55 1.45 13 2 13H14C14.55 13 15 12.55 15 12V5C15 4.45 14.55 4 14 4H7L6 3H2Z"/>
                 </svg>
-                <span>Каталоги</span>
+                <span data-i18n="files_sidebar_title">Каталоги</span>
               </div>
               <div class="file-tree" id="fileTree">
-                <div class="loading-spinner">Загрузка...</div>
+                <div class="loading-spinner" data-i18n="files_loading">Загрузка...</div>
               </div>
             </div>
 
             <!-- File list -->
             <div class="file-manager-main">
               <div class="file-list-header">
-                <div class="file-list-col-name">Имя</div>
-                <div class="file-list-col-size">Размер</div>
-                <div class="file-list-col-date">Изменён</div>
+                <div class="file-list-col-name" data-i18n="files_col_name">Имя</div>
+                <div class="file-list-col-size" data-i18n="files_col_size">Размер</div>
+                <div class="file-list-col-date" data-i18n="files_col_date">Изменён</div>
               </div>
               <div class="file-list-content" id="fileListContent">
-                <div class="loading-spinner">Загрузка...</div>
+                <div class="loading-spinner" data-i18n="files_loading">Загрузка...</div>
               </div>
             </div>
           </div>
 
           <!-- Status bar -->
           <div class="file-manager-statusbar" id="fileStatusBar">
-            <span id="fileStatusText">Готов</span>
+            <span id="fileStatusText" data-i18n="files_status_ready">Готов</span>
             <span id="fileStatusSelection"></span>
           </div>
         </div>
@@ -752,34 +765,34 @@
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M9 2L14 7L9 12V9C4 9 1 11 0 14C1 10 3 6 9 6V2Z"/>
             </svg>
-            <span>Открыть</span>
+            <span data-i18n="context_open">Открыть</span>
           </div>
           <div class="context-menu-item" data-action="openExplorer">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M2 3C1.45 3 1 3.45 1 4V12C1 12.55 1.45 13 2 13H14C14.55 13 15 12.55 15 12V5C15 4.45 14.55 4 14 4H7L6 3H2Z"/>
             </svg>
-            <span>Показать в проводнике</span>
+            <span data-i18n="context_show_in_explorer">Показать в проводнике</span>
           </div>
           <div class="context-menu-separator"></div>
           <div class="context-menu-item" data-action="cut">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M3.5 2C2.67 2 2 2.67 2 3.5C2 4.33 2.67 5 3.5 5C4.33 5 5 4.33 5 3.5L8 6.5L11 3.5C11 4.33 11.67 5 12.5 5C13.33 5 14 4.33 14 3.5C14 2.67 13.33 2 12.5 2C11.67 2 11 2.67 11 3.5L8 6.5L5 3.5C5 2.67 4.33 2 3.5 2ZM3.5 10C2.67 10 2 10.67 2 11.5C2 12.33 2.67 13 3.5 13C4.33 13 5 12.33 5 11.5V7L3.5 8.5V10ZM12.5 10V8.5L11 7V11.5C11 12.33 11.67 13 12.5 13C13.33 13 14 12.33 14 11.5C14 10.67 13.33 10 12.5 10Z"/>
             </svg>
-            <span>Вырезать</span>
+            <span data-i18n="context_cut">Вырезать</span>
             <span class="context-menu-shortcut">Ctrl+X</span>
           </div>
           <div class="context-menu-item" data-action="copy">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M4 2C2.9 2 2 2.9 2 4V12H4V4H12V2H4ZM6 6C4.9 6 4 6.9 4 8V14C4 15.1 4.9 16 6 16H14C15.1 16 16 15.1 16 14V8C16 6.9 15.1 6 14 6H6Z"/>
             </svg>
-            <span>Копировать</span>
+            <span data-i18n="context_copy">Копировать</span>
             <span class="context-menu-shortcut">Ctrl+C</span>
           </div>
           <div class="context-menu-item" data-action="paste" disabled>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M10 0H6C5.45 0 5 0.45 5 1H3C2.45 1 2 1.45 2 2V14C2 14.55 2.45 15 3 15H13C13.55 15 14 14.55 14 14V2C14 1.45 13.55 1 13 1H11C11 0.45 10.55 0 10 0Z"/>
             </svg>
-            <span>Вставить</span>
+            <span data-i18n="context_paste">Вставить</span>
             <span class="context-menu-shortcut">Ctrl+V</span>
           </div>
           <div class="context-menu-separator"></div>
@@ -787,14 +800,14 @@
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M2 12V14H4L11.5 6.5L9.5 4.5L2 12ZM13.5 4.5L14.5 3.5C14.8 3.2 14.8 2.7 14.5 2.4L13.6 1.5C13.3 1.2 12.8 1.2 12.5 1.5L11.5 2.5L13.5 4.5Z"/>
             </svg>
-            <span>Переименовать</span>
+            <span data-i18n="context_rename">Переименовать</span>
             <span class="context-menu-shortcut">F2</span>
           </div>
           <div class="context-menu-item danger" data-action="delete">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M3 4V14C3 14.55 3.45 15 4 15H12C12.55 15 13 14.55 13 14V4H3ZM6 13H5V6H6V13ZM8.5 13H7.5V6H8.5V13ZM11 13H10V6H11V13ZM13 2H10L9 1H7L6 2H3V3H13V2Z"/>
             </svg>
-            <span>Удалить</span>
+            <span data-i18n="context_delete">Удалить</span>
             <span class="context-menu-shortcut">Delete</span>
           </div>
           <div class="context-menu-separator"></div>
@@ -802,17 +815,18 @@
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M12 2H4C2.9 2 2 2.9 2 4V12C2 13.1 2.9 14 4 14H12C13.1 14 14 13.1 14 12V4C14 2.9 13.1 2 12 2ZM8 11C7.45 11 7 10.55 7 10C7 9.45 7.45 9 8 9C8.55 9 9 9.45 9 10C9 10.55 8.55 11 8 11ZM9 7H7V3H9V7Z"/>
             </svg>
-            <span>Свойства</span>
+            <span data-i18n="context_properties">Свойства</span>
           </div>
         </div>
       </div>
     </div>
   </div>
 
+  <script src="../localization/translations.js"></script>
   <script src="dialog.js"></script>
   <script src="custom-dialogs.js"></script>
-  <script src="file-manager.js"></script>
   <script src="renderer.js"></script>
+  <script src="file-manager.js"></script>
   <script src="background.js"></script>
 </body>
 </html>

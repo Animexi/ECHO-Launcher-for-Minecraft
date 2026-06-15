@@ -1,4 +1,3 @@
-﻿// Static background with particles (no animation, 0% GPU usage)
 const canvas = document.getElementById('bgCanvas');
 if (canvas) {
   const ctx = canvas.getContext('2d', { alpha: true });
@@ -25,7 +24,6 @@ if (canvas) {
     }
   }
 
-  // Initialize particles
   for (let i = 0; i < particleCount; i++) {
     particles.push(new Particle());
   }
@@ -50,7 +48,6 @@ if (canvas) {
     }
   }
 
-  // Рисуем один раз статично
   function drawStatic() {
     ctx.clearRect(0, 0, width, height);
     particles.forEach(particle => particle.draw());
@@ -59,12 +56,10 @@ if (canvas) {
 
   drawStatic();
 
-  // Перерисовываем только при изменении размера окна
   window.addEventListener('resize', () => {
     width = canvas.width = window.innerWidth;
     height = canvas.height = window.innerHeight;
 
-    // Пересоздаём частицы для нового размера
     particles.length = 0;
     for (let i = 0; i < particleCount; i++) {
       particles.push(new Particle());

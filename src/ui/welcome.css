@@ -6,11 +6,15 @@
 }
 
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
   overflow: hidden;
   background: #0a0a0a;
   color: #fff;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
 }
 
 .welcome-container {
@@ -247,7 +251,7 @@ h3 {
   border: 1px solid rgba(46, 204, 113, 0.3);
   border-radius: 2px;
   color: #2ecc71;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .info-box {
@@ -302,7 +306,7 @@ h3 {
   display: inline-block;
   padding: 4px 12px;
   border-radius: 2px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   margin-bottom: 16px;
 }
@@ -346,7 +350,7 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: #2ecc71;
 }
@@ -468,7 +472,191 @@ h3 {
   transform: translateY(0);
 }
 
-/* Scrollbar */
+.language-selection-modern {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 500px;
+  padding: 40px;
+}
+
+.lang-header {
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+.lang-logo {
+  font-size: 72px;
+  font-weight: 700;
+  margin-bottom: 32px;
+  background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 8px;
+  text-shadow: 0 4px 20px rgba(46, 204, 113, 0.3);
+}
+
+.lang-header h1 {
+  font-size: 36px;
+  color: #fff;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.lang-subtitle {
+  font-size: 16px;
+  color: #999;
+  font-weight: 400;
+}
+
+.lang-options {
+  display: flex;
+  gap: 32px;
+  justify-content: center;
+}
+
+.lang-card {
+  background: linear-gradient(135deg, rgba(30, 30, 30, 0.95) 0%, rgba(20, 20, 20, 0.95) 100%);
+  border: 2px solid #2a2a2a;
+  border-radius: 16px;
+  padding: 0;
+  width: 200px;
+  height: 200px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  font-family: inherit;
+}
+
+.lang-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(46, 204, 113, 0.15) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.lang-card:hover::before {
+  opacity: 1;
+}
+
+.lang-card:hover {
+  border-color: #2ecc71;
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 12px 40px rgba(46, 204, 113, 0.25);
+}
+
+.lang-card.selected {
+  border-color: #2ecc71;
+  background: linear-gradient(135deg, rgba(46, 204, 113, 0.15) 0%, rgba(39, 174, 96, 0.1) 100%);
+  box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.2);
+}
+
+.lang-card.selected::after {
+  content: '✓';
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  background: #2ecc71;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #0a0a0a;
+  animation: checkmark 0.3s ease;
+}
+
+@keyframes checkmark {
+  0% {
+    transform: scale(0) rotate(-45deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2) rotate(10deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+.lang-card-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+  padding: 20px;
+}
+
+.lang-flag-circle {
+  font-size: 64px;
+  line-height: 1;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.4));
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.lang-card:hover .lang-flag-circle {
+  transform: scale(1.15);
+}
+
+.lang-card.selected .lang-flag-circle {
+  transform: scale(1.1);
+}
+
+.lang-label {
+  font-size: 22px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: color 0.3s;
+}
+
+.lang-card:hover .lang-label {
+  color: #2ecc71;
+}
+
+.lang-card.selected .lang-label {
+  color: #2ecc71;
+}
+
+.lang-sublabel {
+  font-size: 13px;
+  color: #666;
+  font-weight: 400;
+  transition: color 0.3s;
+}
+
+.lang-card:hover .lang-sublabel {
+  color: #888;
+}
+
+.lang-card.selected .lang-sublabel {
+  color: #888;
+}
+
+.language-selection-compact {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 48px;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .welcome-content::-webkit-scrollbar {
   width: 8px;
 }
