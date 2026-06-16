@@ -14,13 +14,12 @@ class CustomDialog {
       overlay.innerHTML = `
         <div class="modal-dialog" style="max-width: 400px;">
           <div class="modal-header">
-            <h3 style="margin: 0;">${title}</h3>
-            <button class="modal-close-x">×</button>
+            <h3>${title}</h3>
           </div>
-          <div class="modal-body" style="padding: 20px;">
-            <p style="margin: 0; color: #ccc; line-height: 1.5;">${message}</p>
+          <div class="modal-body">
+            <p style="margin: 0;">${message}</p>
           </div>
-          <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
+          <div class="modal-footer">
             <button class="btn-primary dialog-ok">${getTranslation('common_ok')}</button>
           </div>
         </div>
@@ -33,7 +32,6 @@ class CustomDialog {
         resolve();
       };
 
-      overlay.querySelector('.modal-close-x').addEventListener('click', close);
       overlay.querySelector('.dialog-ok').addEventListener('click', close);
       overlay.addEventListener('click', (e) => {
         if (e.target === overlay) close();
@@ -51,13 +49,12 @@ class CustomDialog {
       overlay.innerHTML = `
         <div class="modal-dialog" style="max-width: 400px;">
           <div class="modal-header">
-            <h3 style="margin: 0;">${title}</h3>
-            <button class="modal-close-x">×</button>
+            <h3>${title}</h3>
           </div>
-          <div class="modal-body" style="padding: 20px;">
-            <p style="margin: 0; color: #ccc; line-height: 1.5;">${message}</p>
+          <div class="modal-body">
+            <p style="margin: 0;">${message}</p>
           </div>
-          <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
+          <div class="modal-footer">
             <button class="btn-secondary dialog-cancel">${getTranslation('common_cancel')}</button>
             <button class="btn-primary dialog-confirm">${getTranslation('common_ok')}</button>
           </div>
@@ -71,7 +68,6 @@ class CustomDialog {
         resolve(result);
       };
 
-      overlay.querySelector('.modal-close-x').addEventListener('click', () => close(false));
       overlay.querySelector('.dialog-cancel').addEventListener('click', () => close(false));
       overlay.querySelector('.dialog-confirm').addEventListener('click', () => close(true));
       overlay.addEventListener('click', (e) => {
@@ -90,14 +86,13 @@ class CustomDialog {
       overlay.innerHTML = `
         <div class="modal-dialog" style="max-width: 400px;">
           <div class="modal-header">
-            <h3 style="margin: 0;">${title}</h3>
-            <button class="modal-close-x">×</button>
+            <h3>${title}</h3>
           </div>
-          <div class="modal-body" style="padding: 20px;">
-            <p style="margin: 0 0 12px 0; color: #ccc; line-height: 1.5;">${message}</p>
+          <div class="modal-body">
+            <p style="margin: 0 0 12px 0;">${message}</p>
             <input type="text" class="styled-input dialog-input" value="${defaultValue}" style="width: 100%;">
           </div>
-          <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
+          <div class="modal-footer">
             <button class="btn-secondary dialog-cancel">${getTranslation('common_cancel')}</button>
             <button class="btn-primary dialog-ok">${getTranslation('common_ok')}</button>
           </div>
@@ -113,7 +108,6 @@ class CustomDialog {
         resolve(result);
       };
 
-      overlay.querySelector('.modal-close-x').addEventListener('click', () => close(null));
       overlay.querySelector('.dialog-cancel').addEventListener('click', () => close(null));
       overlay.querySelector('.dialog-ok').addEventListener('click', () => close(input.value));
 
@@ -151,13 +145,12 @@ class CustomDialog {
       overlay.innerHTML = `
         <div class="modal-dialog" style="max-width: 600px;">
           <div class="modal-header">
-            <h3 style="margin: 0;">${getTranslation('common_properties')}</h3>
-            <button class="modal-close-x">×</button>
+            <h3>${getTranslation('common_properties')}</h3>
           </div>
-          <div class="modal-body" style="padding: 20px;">
+          <div class="modal-body">
             ${propsHtml}
           </div>
-          <div class="modal-footer" style="display: flex; justify-content: flex-end;">
+          <div class="modal-footer">
             <button class="btn-primary dialog-ok">${getTranslation('common_ok')}</button>
           </div>
         </div>
@@ -170,7 +163,6 @@ class CustomDialog {
         resolve();
       };
 
-      overlay.querySelector('.modal-close-x').addEventListener('click', close);
       overlay.querySelector('.dialog-ok').addEventListener('click', close);
       overlay.addEventListener('click', (e) => {
         if (e.target === overlay) close();

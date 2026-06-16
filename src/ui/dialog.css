@@ -20,6 +20,7 @@
   border-radius: 4px;
   padding: 24px;
   animation: scaleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
 }
 
 @keyframes scaleIn {
@@ -60,7 +61,13 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.confirmation-btn:active {
+  transform: scale(0.97);
 }
 
 .confirmation-btn.cancel {
@@ -70,16 +77,29 @@
 }
 
 .confirmation-btn.cancel:hover {
-  border-color: #fff;
+  border-color: #555;
   color: #fff;
   background: #1a1a1a;
+}
+
+.confirmation-btn.cancel:active {
+  background: #222;
 }
 
 .confirmation-btn.confirm {
   background: #c41e3a;
   color: #fff;
+  border: 1px solid #c41e3a;
 }
 
 .confirmation-btn.confirm:hover {
+  background: #d62848;
+  border-color: #d62848;
+  box-shadow: 0 2px 8px rgba(196, 30, 58, 0.4);
+}
+
+.confirmation-btn.confirm:active {
   background: #a01828;
+  border-color: #a01828;
+  box-shadow: none;
 }

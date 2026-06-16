@@ -2456,6 +2456,10 @@ async function analyzeLogs() {
       return;
     }
     viewer.innerHTML = '';
+    if (result.logs.length === 0) {
+      viewer.innerHTML = `<div class="logs-placeholder">Логи не найдены. Запустите игру хотя бы раз, чтобы появились логи.</div>`;
+      return;
+    }
     result.logs.forEach(log => {
       const line = document.createElement('div');
       line.className = `log-line ${log.type}`;
