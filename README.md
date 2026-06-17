@@ -218,26 +218,6 @@ A modern custom Minecraft launcher built with Electron. Full Modrinth integratio
 3. Choose installation directory
 4. Launch ECHO Launcher
 
-### From Source
-```bash
-# Clone the repository
-git clone https://github.com/your-username/echo-launcher.git
-cd echo-launcher
-
-# Install dependencies
-npm install
-
-# Run in development mode
-npm run dev
-
-# Or run in normal mode
-npm start
-```
-
-### Build Installer
-```bash
-npm run build-installer
-```
 The finished installer will appear in the `dist/` folder.
 
 ---
@@ -357,6 +337,3 @@ MIT
 
 ---
 
-## Author
-
-Created with [ECHO Launcher](https://github.com/your-username/echo-launcher)
