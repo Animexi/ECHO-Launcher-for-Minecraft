@@ -34,9 +34,7 @@ function notify(key, params = {}, type = 'info') {
   let message = localizationManager ? localizationManager.t(key, params) : key;
   if (typeof showNotification === 'function') {
     showNotification(message, type);
-  } else {
-    console.log(`[${type}] ${message}`);
-  }
+  } else {  }
 }
 
 function t(key, params = {}) {
@@ -72,23 +70,42 @@ function initLocalization() {
 document.addEventListener('DOMContentLoaded', async () => {
   initLocalization();
   await loadConfig();
-  await loadSystemMemory();
-  await loadSystemInfo();
-  await loadVersions();
-  await loadRunningInstances();
-  await loadIsolationSettings();
   setupEventListeners();
   updateUI();
-  await initElyByAuth();
-  await initAccountsTab();
-  await initModsTab();
-  await initMediaTab();
-  await initToolsTab();
-  await initFileManager();
+  await loadIsolationSettings();
 
-  setInterval(async () => {
-    await loadRunningInstances();
-  }, 5000);
+  Promise.all([
+    loadSystemMemory(),
+    loadSystemInfo(),
+    loadVersions(),
+    loadRunningInstances(),
+    initElyByAuth(),
+    initAccountsTab(),
+    initModsTab(),
+    initMediaTab(),
+    initToolsTab(),
+    initFileManager()
+  ]).catch(err => console.error('Init error:', err));
+
+  let instancesInterval = null;
+  function startInstancesPolling() {
+    if (instancesInterval) return;
+    instancesInterval = setInterval(async () => {
+      if (document.hidden) return;
+      await loadRunningInstances();
+    }, 20000);
+  }
+  startInstancesPolling();
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (instancesInterval) { clearInterval(instancesInterval); instancesInterval = null; }
+      if (autoSaveTimeout) { clearTimeout(autoSaveTimeout); autoSaveTimeout = null; }
+    } else {
+      startInstancesPolling();
+      loadRunningInstances();
+    }
+  });
 });
 
 async function loadSystemInfo() {
@@ -228,9 +245,7 @@ function autoSaveConfig() {
   autoSaveTimeout = setTimeout(async () => {
     try {
       await ipcRenderer.invoke('save-config', currentConfig);
-      await saveIsolationSettings();
-      console.log('Auto-saved config');
-    } catch (error) {
+      await saveIsolationSettings();    } catch (error) {
       console.error('Auto-save error:', error);
     }
   }, 1000);
@@ -289,6 +304,7 @@ function updateRunningInstancesUI() {
   }
   container.style.display = 'flex';
   list.innerHTML = '';
+  const fragment = document.createDocumentFragment();
   runningInstances.forEach(instance => {
     const item = document.createElement('div');
     item.className = 'instance-item';
@@ -302,8 +318,9 @@ function updateRunningInstancesUI() {
       </div>
       <button class="kill-instance-btn" data-instance-id="${instance.id}">${t('common_close')}</button>
     `;
-    list.appendChild(item);
+    fragment.appendChild(item);
   });
+  list.appendChild(fragment);
 
   list.querySelectorAll('.kill-instance-btn').forEach(btn => {
     btn.onclick = async () => await killInstance(btn.dataset.instanceId);
@@ -378,6 +395,7 @@ function populateVersionsList() {
     versionsList.innerHTML = `<div class="loading-spinner">${t('versions_no_versions')}</div>`;
     return;
   }
+  const fragment = document.createDocumentFragment();
   displayVersions.forEach(version => {
     const card = document.createElement('div');
     card.className = 'version-card';
@@ -413,9 +431,7 @@ function populateVersionsList() {
         const status = card.querySelector('.version-status');
         if (status) status.classList.add('hidden');
         if (loader) loader.classList.remove('hidden');
-        card.style.pointerEvents = 'none';
-        console.log('Downloading version:', version.id);
-        await downloadVersion(version.id);
+        card.style.pointerEvents = 'none';        await downloadVersion(version.id);
         setTimeout(() => switchTab('play'), 1000);
       });
     } else {
@@ -428,8 +444,9 @@ function populateVersionsList() {
         });
       }
     }
-    versionsList.appendChild(card);
+    fragment.appendChild(card);
   });
+  versionsList.appendChild(fragment);
 }
 
 async function downloadVersion(versionId) {
@@ -756,8 +773,8 @@ async function launchGame() {
   }
 }
 
-ipcRenderer.on('instance-started', () => loadRunningInstances());
-ipcRenderer.on('instance-stopped', () => loadRunningInstances());
+ipcRenderer.on('instance-started', () => { if (!document.hidden) loadRunningInstances(); });
+ipcRenderer.on('instance-stopped', () => { if (!document.hidden) loadRunningInstances(); });
 
 async function saveSettings() {
   const memoryInput = document.getElementById('memoryInput');
@@ -820,18 +837,26 @@ async function loadStats() {
   try {
     const stats = await ipcRenderer.invoke('get-stats');
     const favorite = await ipcRenderer.invoke('get-favorite-version');
-    document.getElementById('totalPlaytime').textContent = formatPlaytime(stats.totalPlaytime);
-    document.getElementById('totalLaunches').textContent = stats.totalLaunches;
-    document.getElementById('favoriteVersion').textContent = favorite ? favorite.version : '-';
+    const totalPlaytime = document.getElementById('totalPlaytime');
+    const totalLaunches = document.getElementById('totalLaunches');
+    const favoriteVersion = document.getElementById('favoriteVersion');
+    if (totalPlaytime) totalPlaytime.textContent = formatPlaytime(stats.totalPlaytime);
+    if (totalLaunches) totalLaunches.textContent = stats.totalLaunches;
+    if (favoriteVersion) favoriteVersion.textContent = favorite ? favorite.version : '-';
     displayLaunchHistory(stats.launchHistory);
     displayVersionStats(stats.versions);
   } catch (error) {
     console.error('Error loading stats:', error);
-    document.getElementById('totalPlaytime').textContent = t('stats_no_data');
-    document.getElementById('totalLaunches').textContent = '0';
-    document.getElementById('favoriteVersion').textContent = '-';
-    document.getElementById('launchHistory').innerHTML = `<div class="empty-state">${t('stats_history_empty')}</div>`;
-    document.getElementById('versionStats').innerHTML = `<div class="empty-state">${t('stats_no_data')}</div>`;
+    const totalPlaytime = document.getElementById('totalPlaytime');
+    const totalLaunches = document.getElementById('totalLaunches');
+    const favoriteVersion = document.getElementById('favoriteVersion');
+    const launchHistory = document.getElementById('launchHistory');
+    const versionStats = document.getElementById('versionStats');
+    if (totalPlaytime) totalPlaytime.textContent = t('stats_no_data');
+    if (totalLaunches) totalLaunches.textContent = '0';
+    if (favoriteVersion) favoriteVersion.textContent = '-';
+    if (launchHistory) launchHistory.innerHTML = `<div class="empty-state">${t('stats_history_empty')}</div>`;
+    if (versionStats) versionStats.innerHTML = `<div class="empty-state">${t('stats_no_data')}</div>`;
   }
 }
 
@@ -866,12 +891,14 @@ function displayLaunchHistory(history) {
     return;
   }
   container.innerHTML = '';
+  const fragment = document.createDocumentFragment();
   history.slice(0, 20).forEach(item => {
     const div = document.createElement('div');
     div.className = 'launch-item';
     div.innerHTML = `<div><div class="launch-version">${item.version}</div><div class="launch-time">${formatTimestamp(item.timestamp)} • ${item.duration} ${t('stats_minutes')}</div></div>`;
-    container.appendChild(div);
+    fragment.appendChild(div);
   });
+  container.appendChild(fragment);
 }
 
 function displayVersionStats(versions) {
@@ -882,6 +909,7 @@ function displayVersionStats(versions) {
     return;
   }
   container.innerHTML = '';
+  const fragment = document.createDocumentFragment();
   const sortedVersions = Object.entries(versions).sort((a, b) => b[1].playtime - a[1].playtime);
   sortedVersions.forEach(([version, data]) => {
     const card = document.createElement('div');
@@ -903,8 +931,9 @@ function displayVersionStats(versions) {
         <div class="version-stat-row"><span>${t('stats_last_played')}</span><span>${formatTimestamp(data.lastPlayed)}</span></div>
       </div>
     `;
-    container.appendChild(card);
+    fragment.appendChild(card);
   });
+  container.appendChild(fragment);
 }
 
 async function initElyByAuth() {
@@ -1498,10 +1527,10 @@ async function downloadJava(version) {
   const progressStage = document.getElementById('javaProgressStage');
   const progressPercent = document.getElementById('javaProgressPercent');
   const progressFill = document.getElementById('javaProgressFill');
-  progressContainer.classList.remove('hidden');
-  progressStage.textContent = t('java_downloading', {version: version});
-  progressPercent.textContent = '0%';
-  progressFill.style.width = '0%';
+  if (progressContainer) progressContainer.classList.remove('hidden');
+  if (progressStage) progressStage.textContent = t('java_downloading', {version: version});
+  if (progressPercent) progressPercent.textContent = '0%';
+  if (progressFill) progressFill.style.width = '0%';
   try {
     const result = await ipcRenderer.invoke('java-download', version);
     if (result.success) {
@@ -1557,12 +1586,12 @@ ipcRenderer.on('java-download-progress', (event, progress) => {
   const progressStage = document.getElementById('javaProgressStage');
   const progressPercent = document.getElementById('javaProgressPercent');
   const progressFill = document.getElementById('javaProgressFill');
-  if (progressContainer.classList.contains('hidden')) {
+  if (progressContainer && progressContainer.classList.contains('hidden')) {
     progressContainer.classList.remove('hidden');
   }
-  progressStage.textContent = progress.message || t('java_downloading', {version: ''});
-  progressPercent.textContent = `${progress.progress || 0}%`;
-  progressFill.style.width = `${progress.progress || 0}%`;
+  if (progressStage) progressStage.textContent = progress.message || t('java_downloading', {version: ''});
+  if (progressPercent) progressPercent.textContent = `${progress.progress || 0}%`;
+  if (progressFill) progressFill.style.width = `${progress.progress || 0}%`;
 });
 
 let currentModsPage = 0;
@@ -1754,15 +1783,16 @@ function displayModsResults(mods) {
   }
   resultsContainer.innerHTML = '';
   resultsContainer.scrollTop = 0;
+  const fragment = document.createDocumentFragment();
   mods.forEach(mod => {
     const card = document.createElement('div');
     card.className = 'mod-card';
     const iconUrl = mod.icon_url || mod.gallery?.[0]?.url || '';
     const downloads = formatNumber(mod.downloads);
-    const author = mod.author || 'Unknown';
+    const author = mod.author || t('common_unknown');
     card.innerHTML = `
-      <div class="mod-card-header">
-        <div class="mod-icon">${iconUrl ? `<img src="${iconUrl}" alt="${mod.title}">` : ''}</div>
+        <div class="mod-card-header">
+          <div class="mod-icon">${iconUrl ? `<img src="${iconUrl}" alt="${mod.title}" loading="lazy">` : ''}</div>
         <div class="mod-info">
           <h3 class="mod-title">${mod.title}</h3>
           <div class="mod-author">by ${author}</div>
@@ -1775,8 +1805,9 @@ function displayModsResults(mods) {
         <button class="mod-details-btn" data-project-id="${mod.project_id}">${t('mod_details')}</button>
       </div>
     `;
-    resultsContainer.appendChild(card);
+    fragment.appendChild(card);
   });
+  resultsContainer.appendChild(fragment);
   resultsContainer.querySelectorAll('.mod-download-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const projectId = btn.dataset.projectId;
@@ -2005,7 +2036,7 @@ async function showModDetails(projectId) {
     const result = await ipcRenderer.invoke('modrinth-get-mod', projectId);
     if (!result.success || !result.mod) {
       loadingDialog.remove();
-      notify('mod_details_error', {error: result.error || 'Unknown'}, 'error');
+      notify('mod_details_error', {error: result.error || t('common_unknown')}, 'error');
       return;
     }
     const mod = result.mod;
@@ -2065,7 +2096,7 @@ async function showModDetails(projectId) {
             ${iconUrl ? `<img src="${iconUrl}" alt="${mod.title}" class="mod-details-icon">` : ''}
             <div class="mod-details-title-section">
               <h2>${mod.title}</h2>
-              <div class="mod-details-author">by ${mod.team || mod.author || 'Unknown'}</div>
+              <div class="mod-details-author">by ${mod.team || mod.author || t('common_unknown')}</div>
               <div class="mod-details-stats">
                 <span>📥 ${downloads}</span>
                 <span>❤️ ${followers}</span>
@@ -2240,69 +2271,146 @@ function showModpackVersionDialogAll(versions, modpackTitle) {
   });
 }
 
-function showTargetVersionDialog(versions, contentType) {
-  return new Promise((resolve) => {
+async function showTargetVersionDialog(installedVersions, contentType) {
+  return new Promise(async (resolve) => {
     const dialog = document.createElement('div');
     dialog.className = 'modal-overlay';
     const contentTypeNames = { mod: t('mods_type_mod'), resourcepack: t('mods_type_resourcepack'), shader: t('mods_type_shader') };
     const typeName = contentTypeNames[contentType] || t('common_file');
-    const isolatedVersions = versions.filter(v => v.isolated);
-    const sharedVersion = versions.find(v => !v.isolated);
-    let versionsHtml = '';
-    if (isolatedVersions.length > 0) {
-      versionsHtml += `<div class="version-group"><h3>${t('isolated_versions')}</h3>`;
-      isolatedVersions.forEach(v => {
-        let loaderType = 'vanilla';
-        if (v.version.includes('-forge-')) loaderType = 'forge';
-        else if (v.version.includes('-fabric-')) loaderType = 'fabric';
-        else if (v.version.includes('-neoforge-')) loaderType = 'neoforge';
-        else if (v.version.includes('-quilt-')) loaderType = 'quilt';
-        versionsHtml += `
-          <div class="version-item" data-version="${v.version}">
-            <div class="version-info">
-              <div class="version-name">${v.version}</div>
-              <div class="version-badge ${loaderType}">${loaderType}</div>
-            </div>
-            <button class="version-select-btn" data-version="${v.version}">${t('common_select')}</button>
-          </div>
-        `;
-      });
-      versionsHtml += '</div>';
-    }
-    if (sharedVersion) {
-      versionsHtml += `<div class="version-group"><h3>${t('shared_version')}</h3>`;
-      versionsHtml += `
-        <div class="version-item" data-version="${sharedVersion.version}">
-          <div class="version-info">
-            <div class="version-name">${sharedVersion.version}</div>
-            <div class="version-meta">${t('shared_version_desc')}</div>
-          </div>
-          <button class="version-select-btn" data-version="${sharedVersion.version}">${t('common_select')}</button>
-        </div>
-      `;
-      versionsHtml += '</div>';
-    }
+
     dialog.innerHTML = `
-      <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-content" style="max-width: 700px;">
         <div class="modal-header">
           <h2>${t('mod_select_target_version_title', {type: typeName})}</h2>
           <button class="modal-close-x">×</button>
         </div>
-        <div class="version-list" style="max-height: 400px; overflow-y: auto;">
-          ${versionsHtml}
+        <div style="padding: 0 20px 10px 20px;">
+          <input type="text" id="versionSearchInput" placeholder="${t('common_search')}..." style="width: 100%; padding: 8px 12px; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 6px; color: #fff; font-size: 14px;">
+        </div>
+        <div class="version-list" id="versionListContainer" style="max-height: 450px; overflow-y: auto; padding: 0 20px 20px 20px;">
+          <div style="text-align: center; padding: 40px; color: #888;">
+            <div class="loading-spinner" style="margin: 0 auto 10px;"></div>
+            <div>${t('common_loading')}</div>
+          </div>
         </div>
       </div>
     `;
+
     document.body.appendChild(dialog);
+
     const close = () => { dialog.remove(); resolve(null); };
     dialog.querySelector('.modal-close-x').addEventListener('click', close);
     dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
-    dialog.querySelectorAll('.version-select-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const version = btn.dataset.version;
-        dialog.remove();
-        resolve(version);
+
+    const availableVersionsResult = await ipcRenderer.invoke('get-available-minecraft-versions');
+    const availableVersions = availableVersionsResult.success ? availableVersionsResult.versions : [];
+
+    const isolatedVersions = installedVersions.filter(v => v.isolated);
+    const sharedVersions = installedVersions.filter(v => !v.isolated);
+
+    const installedVersionNames = new Set(installedVersions.map(v => v.version));
+
+    const renderVersionList = (searchQuery = '') => {
+      const container = dialog.querySelector('#versionListContainer');
+      let versionsHtml = '';
+
+      const query = searchQuery.toLowerCase();
+
+      if (isolatedVersions.length > 0) {
+        const filtered = isolatedVersions.filter(v => v.version.toLowerCase().includes(query));
+        if (filtered.length > 0) {
+          versionsHtml += `<div class="version-group"><h3>${t('isolated_versions')}</h3>`;
+          filtered.forEach(v => {
+            let loaderType = 'vanilla';
+            if (v.version.includes('-forge-')) loaderType = 'forge';
+            else if (v.version.includes('-fabric-')) loaderType = 'fabric';
+            else if (v.version.includes('-neoforge-')) loaderType = 'neoforge';
+            else if (v.version.includes('-quilt-')) loaderType = 'quilt';
+            versionsHtml += `
+              <div class="version-item" data-version="${v.version}">
+                <div class="version-info">
+                  <div class="version-name">${v.version}</div>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <div class="version-badge ${loaderType}">${loaderType}</div>
+                    <div class="version-badge installed" style="background: #2d5016; color: #7ed321;">${t('common_installed')}</div>
+                  </div>
+                </div>
+                <button class="version-select-btn" data-version="${v.version}">${t('common_select')}</button>
+              </div>
+            `;
+          });
+          versionsHtml += '</div>';
+        }
+      }
+
+      const filteredShared = sharedVersions.filter(v => v.version.toLowerCase().includes(query));
+      if (filteredShared.length > 0) {
+        versionsHtml += `<div class="version-group"><h3>${t('shared_version')}</h3>`;
+        filteredShared.forEach(v => {
+          versionsHtml += `
+            <div class="version-item" data-version="${v.version}">
+              <div class="version-info">
+                <div class="version-name">${v.version}</div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <div class="version-meta">${t('shared_version_desc')}</div>
+                  <div class="version-badge installed" style="background: #2d5016; color: #7ed321;">${t('common_installed')}</div>
+                </div>
+              </div>
+              <button class="version-select-btn" data-version="${v.version}">${t('common_select')}</button>
+            </div>
+          `;
+        });
+        versionsHtml += '</div>';
+      }
+
+      const notInstalledVersions = availableVersions.filter(v =>
+        !installedVersionNames.has(v.id) && v.id.toLowerCase().includes(query)
+      );
+
+      if (notInstalledVersions.length > 0) {
+        versionsHtml += `<div class="version-group">
+          <h3>${t('available_versions') || 'Available Versions'}</h3>
+          <div style="font-size: 12px; color: #888; margin-bottom: 10px;">${t('version_not_installed_note') || 'These versions are not installed. Files will be placed in shared folders.'}</div>
+        `;
+        notInstalledVersions.slice(0, 20).forEach(v => {
+          versionsHtml += `
+            <div class="version-item" data-version="${v.id}">
+              <div class="version-info">
+                <div class="version-name">${v.id}</div>
+                <div class="version-badge vanilla">vanilla</div>
+              </div>
+              <button class="version-select-btn" data-version="${v.id}">${t('common_select')}</button>
+            </div>
+          `;
+        });
+        if (notInstalledVersions.length > 20) {
+          versionsHtml += `<div style="text-align: center; color: #888; padding: 10px; font-size: 12px;">
+            ${t('showing_first_n_versions', {count: 20}) || `Showing first 20 of ${notInstalledVersions.length} versions. Use search to find more.`}
+          </div>`;
+        }
+        versionsHtml += '</div>';
+      }
+
+      if (!versionsHtml) {
+        versionsHtml = `<div style="text-align: center; padding: 40px; color: #888;">${t('no_versions_found') || 'No versions found'}</div>`;
+      }
+
+      container.innerHTML = versionsHtml;
+
+      container.querySelectorAll('.version-select-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const version = btn.dataset.version;
+          dialog.remove();
+          resolve(version);
+        });
       });
+    };
+
+    renderVersionList();
+
+    const searchInput = dialog.querySelector('#versionSearchInput');
+    searchInput.addEventListener('input', (e) => {
+      renderVersionList(e.target.value);
     });
   });
 }
@@ -2334,11 +2442,12 @@ async function loadScreenshots() {
       return;
     }
     grid.innerHTML = '';
+    const fragment = document.createDocumentFragment();
     result.screenshots.forEach(screenshot => {
       const card = document.createElement('div');
       card.className = 'screenshot-card';
       card.innerHTML = `
-        <img src="file:///${screenshot.path.replace(/\\/g, '/')}" class="screenshot-img" alt="${screenshot.name}">
+        <img src="file:///${screenshot.path.replace(/\\/g, '/')}" class="screenshot-img" alt="${screenshot.name}" loading="lazy">
         <div class="screenshot-info">
           <div class="screenshot-name" title="${screenshot.name}">${screenshot.name}</div>
           <button class="screenshot-delete" data-path="${screenshot.path}">
@@ -2367,8 +2476,9 @@ async function loadScreenshots() {
           }
         }
       });
-      grid.appendChild(card);
+      fragment.appendChild(card);
     });
+    grid.appendChild(fragment);
   } catch (error) {
     console.error('Error loading screenshots:', error);
     grid.innerHTML = `<div class="empty-state">${t('common_error')}</div>`;
@@ -2508,9 +2618,7 @@ function showDetailedDialog(title, message, type = 'info') {
   dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.remove(); });
 }
 
-async function initFileManager() {
-  console.log('renderer.js: Calling file manager init...');
-  setTimeout(() => {
+async function initFileManager() {  setTimeout(() => {
     if (typeof initFileManagerNow === 'function') {
       initFileManagerNow();
     } else {

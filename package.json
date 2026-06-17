@@ -1,6 +1,6 @@
 {
   "name": "echo-launcher",
-  "version": "5.0.0s",
+  "version": "6.0.0s",
   "description": "ECHO - Custom Minecraft Launcher with beautiful UI and animations",
   "main": "src/main.js",
   "scripts": {

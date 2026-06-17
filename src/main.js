@@ -78,6 +78,7 @@ function createWindow() {
     icon: path.join(__dirname, '../icon.png')
   });
   mainWindow.loadFile('src/ui/index.html');
+  mainWindow.webContents.setBackgroundThrottling(true);
   if (process.argv.includes('--dev')) mainWindow.webContents.openDevTools();
 }
 
@@ -127,20 +128,43 @@ ipcMain.handle('launch-game', async (event, config) => {
 ipcMain.handle('get-installed-versions', async () => await launcher.getInstalledVersions());
 ipcMain.handle('get-versions-with-isolation', async () => {
   try {
-    const versions = await launcher.getInstalledVersions();
     const os = require('os');
     const fs = require('fs-extra');
+    const versionsDir = path.join(os.homedir(), '.minecraft_custom', 'versions');
+
+    if (!await fs.pathExists(versionsDir)) {
+      return [];
+    }
+
     const settingsPath = path.join(os.homedir(), '.minecraft_custom', 'isolation_settings.json');
     let isolatedVersions = [];
     if (await fs.pathExists(settingsPath)) {
       try { isolatedVersions = await fs.readJson(settingsPath); } catch (e) {}
     }
 
-    return versions.map(v => ({
-      version: v,
-      isolated: isolatedVersions.includes(v)
-    }));
+    const allDirs = await fs.readdir(versionsDir);
+    const versions = [];
+
+    for (const dir of allDirs) {
+      const versionDir = path.join(versionsDir, dir);
+      const stat = await fs.stat(versionDir);
+
+      if (!stat.isDirectory()) continue;
+
+      const jsonPath = path.join(versionDir, `${dir}.json`);
+      const jarPath = path.join(versionDir, `${dir}.jar`);
+
+      if (await fs.pathExists(jsonPath) && await fs.pathExists(jarPath)) {
+        versions.push({
+          version: dir,
+          isolated: isolatedVersions.includes(dir)
+        });
+      }
+    }
+
+    return versions;
   } catch (error) {
+    console.error('Error getting versions with isolation:', error);
     return [];
   }
 });
@@ -344,9 +368,10 @@ ipcMain.handle('resize-launcher', () => {
   mainWindow.center();
   return { success: true };
 });
+let cachedSystemInfo = null;
 ipcMain.handle('get-system-info', () => {
+  if (cachedSystemInfo) return cachedSystemInfo;
   const os = require('os');
-  const { execSync } = require('child_process');
   const totalMemoryGB = Math.floor(os.totalmem() / 1024 / 1024 / 1024);
   const cpuModel = os.cpus()[0].model;
   const cpuCores = os.cpus().length;
@@ -355,12 +380,14 @@ ipcMain.handle('get-system-info', () => {
   let gpuInfo = [];
   try {
     if (platform === 'win32') {
-      const wmic = execSync('wmic path win32_VideoController get name', { encoding: 'utf-8' });
+      const { execSync } = require('child_process');
+      const wmic = execSync('wmic path win32_VideoController get name', { encoding: 'utf-8', timeout: 3000 });
       const lines = wmic.split('\n').filter(line => line.trim() && line.trim() !== 'Name');
       gpuInfo = lines.map(line => line.trim());
     }
   } catch (error) {}
-  return { cpu: cpuModel, cpuCores, totalMemoryGB, platform, arch, gpus: gpuInfo };
+  cachedSystemInfo = { cpu: cpuModel, cpuCores, totalMemoryGB, platform, arch, gpus: gpuInfo };
+  return cachedSystemInfo;
 });
 ipcMain.handle('get-stats', async () => await statsManager.getStats());
 
@@ -506,8 +533,8 @@ ipcMain.handle('optimize-settings', async () => {
     let recommendation = '';
 
     if (totalMemory >= 16384) {
-      recommendedMemory = 8192;
-      profile = 'high';
+      recommendedMemory = 6144;
+      profile = 'performance';
       recommendation = bt('optimization_high');
     } else if (totalMemory >= 8192) {
       recommendedMemory = 4096;
@@ -515,11 +542,11 @@ ipcMain.handle('optimize-settings', async () => {
       recommendation = bt('optimization_balanced');
     } else if (totalMemory >= 4096) {
       recommendedMemory = 2048;
-      profile = 'low';
+      profile = 'potato';
       recommendation = bt('optimization_low');
     } else {
       recommendedMemory = 1024;
-      profile = 'minimal';
+      profile = 'potato';
       recommendation = bt('optimization_minimal');
     }
 
@@ -734,8 +761,8 @@ ipcMain.handle('modrinth-download-mod', async (event, downloadUrl, fileName, tar
         try { isolatedVersions = await fs.readJson(settingsPath); } catch (e) {}
       }
       if (isolatedVersions.includes(targetVersion)) {
-        const instanceDir = path.join(os.homedir(), '.minecraft_custom', 'instances', targetVersion);
-        modsDir = path.join(instanceDir, 'mods');
+        const versionDir = path.join(os.homedir(), '.minecraft_custom', 'versions', targetVersion);
+        modsDir = path.join(versionDir, 'mods');
       } else {
         modsDir = path.join(os.homedir(), '.minecraft_custom', 'mods');
       }
@@ -802,8 +829,8 @@ ipcMain.handle('modrinth-download-resourcepack', async (event, downloadUrl, file
         try { isolatedVersions = await fs.readJson(settingsPath); } catch (e) {}
       }
       if (isolatedVersions.includes(targetVersion)) {
-        const instanceDir = path.join(os.homedir(), '.minecraft_custom', 'instances', targetVersion);
-        resourcepacksDir = path.join(instanceDir, 'resourcepacks');
+        const versionDir = path.join(os.homedir(), '.minecraft_custom', 'versions', targetVersion);
+        resourcepacksDir = path.join(versionDir, 'resourcepacks');
       } else {
         resourcepacksDir = path.join(os.homedir(), '.minecraft_custom', 'resourcepacks');
       }
@@ -832,8 +859,8 @@ ipcMain.handle('modrinth-download-shader', async (event, downloadUrl, fileName, 
         try { isolatedVersions = await fs.readJson(settingsPath); } catch (e) {}
       }
       if (isolatedVersions.includes(targetVersion)) {
-        const instanceDir = path.join(os.homedir(), '.minecraft_custom', 'instances', targetVersion);
-        shadersDir = path.join(instanceDir, 'shaderpacks');
+        const versionDir = path.join(os.homedir(), '.minecraft_custom', 'versions', targetVersion);
+        shadersDir = path.join(versionDir, 'shaderpacks');
       } else {
         shadersDir = path.join(os.homedir(), '.minecraft_custom', 'shaderpacks');
       }
@@ -848,6 +875,15 @@ ipcMain.handle('modrinth-download-shader', async (event, downloadUrl, fileName, 
     return { ...result, filePath };
   } catch (error) {
     return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-available-minecraft-versions', async () => {
+  try {
+    const versions = await minecraftLauncher.getAvailableVersions();
+    return { success: true, versions };
+  } catch (error) {
+    return { success: false, error: error.message, versions: [] };
   }
 });
 

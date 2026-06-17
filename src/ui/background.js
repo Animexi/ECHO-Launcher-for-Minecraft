@@ -6,7 +6,7 @@ if (canvas) {
   let height = canvas.height = window.innerHeight;
 
   const particles = [];
-  const particleCount = 40;
+  const particleCount = 30;
   const connectionDistance = 150;
 
   class Particle {
@@ -28,17 +28,18 @@ if (canvas) {
     particles.push(new Particle());
   }
 
-  function drawConnections() {
+  function drawStatic() {
+    ctx.clearRect(0, 0, width, height);
     for (let i = 0; i < particles.length; i++) {
+      particles[i].draw();
       for (let j = i + 1; j < particles.length; j++) {
         const dx = particles[i].x - particles[j].x;
         const dy = particles[i].y - particles[j].y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-
         if (distance < connectionDistance) {
           const opacity = (1 - distance / connectionDistance) * 0.15;
           ctx.beginPath();
-          ctx.moveTo(particles[i].x, particles[j].y);
+          ctx.moveTo(particles[i].x, particles[i].y);
           ctx.lineTo(particles[j].x, particles[j].y);
           ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
           ctx.lineWidth = 0.5;
@@ -48,23 +49,19 @@ if (canvas) {
     }
   }
 
-  function drawStatic() {
-    ctx.clearRect(0, 0, width, height);
-    particles.forEach(particle => particle.draw());
-    drawConnections();
-  }
-
   drawStatic();
 
+  let resizeTimer;
   window.addEventListener('resize', () => {
-    width = canvas.width = window.innerWidth;
-    height = canvas.height = window.innerHeight;
-
-    particles.length = 0;
-    for (let i = 0; i < particleCount; i++) {
-      particles.push(new Particle());
-    }
-
-    drawStatic();
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+      particles.length = 0;
+      for (let i = 0; i < particleCount; i++) {
+        particles.push(new Particle());
+      }
+      drawStatic();
+    }, 200);
   });
 }

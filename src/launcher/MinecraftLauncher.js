@@ -5,6 +5,7 @@ const { spawn } = require('child_process');
 const os = require('os');
 const extract = require('extract-zip');
 const JavaManager = require('./JavaManager');
+const GPUSettings = require('../utils/GPUSettings');
 const { bt } = require('../localization/backend-translations');
 
 class MinecraftLauncher {
@@ -17,6 +18,7 @@ class MinecraftLauncher {
     this.instancesDir = path.join(this.minecraftDir, 'instances');
     this.authlibPath = path.join(this.minecraftDir, 'authlib-injector.jar');
     this.javaManager = new JavaManager();
+    this.gpuSettings = new GPUSettings();
 
     this.initDirectories();
   }
@@ -496,6 +498,19 @@ class MinecraftLauncher {
 
     console.log(`Using Java: ${javaPath}`);
 
+    // Автоматически применяем настройки GPU для высокой производительности
+    try {
+      console.log('Applying GPU settings for Java...');
+      const gpuResult = await this.gpuSettings.setJavaGPUPreference(javaPath, 'high-performance');
+      if (gpuResult.success) {
+        console.log('GPU settings applied: High Performance mode enabled for Java');
+      } else {
+        console.warn('Failed to apply GPU settings:', gpuResult.error);
+      }
+    } catch (gpuError) {
+      console.warn('GPU settings error (non-critical):', gpuError.message);
+    }
+
     const optimizationArgs = this.getOptimizationArgs(optimizationProfile, memory);
     let authlibArgs = [];
     if (await fs.pathExists(this.authlibPath)) authlibArgs = [`-javaagent:${this.authlibPath}=ely.by`];
@@ -503,6 +518,7 @@ class MinecraftLauncher {
       `-Xmx${memory}M`,
       `-Xms${Math.floor(memory / 2)}M`,
       ...optimizationArgs,
+      '-Dlog4j2.level=warn',
       ...authlibArgs,
       `-Djava.library.path=${nativesDir}`,
       `-Dorg.lwjgl.opengl.Display.allowSoftwareOpenGL=false`,
@@ -536,6 +552,10 @@ class MinecraftLauncher {
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe']
     });
+    try {
+      const { execSync } = require('child_process');
+      execSync(`powershell -NoProfile -Command "(Get-Process -Id ${gameProcess.pid}).PriorityClass = 'High'"`, { stdio: 'ignore', timeout: 3000 });
+    } catch (e) { /* non-critical */ }
     gameProcess.stdout.on('data', (data) => console.log(`[Minecraft] ${data}`));
     gameProcess.stderr.on('data', (data) => console.error(`[Minecraft Error] ${data}`));
     gameProcess.on('error', (error) => console.error('Failed to start game:', error));
@@ -550,12 +570,58 @@ class MinecraftLauncher {
   }
 
   getOptimizationArgs(profile, memory) {
+    const os = require('os');
+    const cores = os.cpus().length;
+    const phys = Math.max(2, Math.floor(cores / 2));
+
     if (profile === 'performance') {
-      return ['-XX:+UseG1GC', '-XX:+ParallelRefProcEnabled', '-XX:MaxGCPauseMillis=200', '-XX:+UnlockExperimentalVMOptions', '-XX:+DisableExplicitGC', '-XX:G1NewSizePercent=30', '-XX:G1ReservePercent=20', '-XX:G1HeapRegionSize=16M', '-XX:G1HeapWastePercent=5', '-XX:G1MixedGCCountTarget=4', '-XX:InitiatingHeapOccupancyPercent=15', '-XX:SurvivorRatio=32', '-XX:MaxTenuringThreshold=1'];
+      return [
+        '-XX:+UseG1GC',
+        '-XX:+UnlockExperimentalVMOptions',
+        '-XX:MaxGCPauseMillis=50',
+        `-XX:ParallelGCThreads=${phys}`,
+        `-XX:ConcGCThreads=${Math.max(1, Math.floor(phys / 4))}`,
+        '-XX:G1NewSizePercent=30',
+        '-XX:G1ReservePercent=20',
+        '-XX:G1HeapRegionSize=16M',
+        '-XX:G1HeapWastePercent=5',
+        '-XX:G1MixedGCCountTarget=4',
+        '-XX:InitiatingHeapOccupancyPercent=40',
+        '-XX:SurvivorRatio=32',
+        '-XX:MaxTenuringThreshold=1',
+        '-XX:+ParallelRefProcEnabled',
+        '-XX:+DisableExplicitGC',
+        `-XX:ActiveProcessorCount=${cores}`
+      ];
     } else if (profile === 'potato') {
-      return ['-XX:+UseG1GC', '-XX:MaxGCPauseMillis=100', '-XX:+UnlockExperimentalVMOptions', '-XX:G1NewSizePercent=20', '-XX:G1ReservePercent=20', '-XX:InitiatingHeapOccupancyPercent=30'];
+      return [
+        '-XX:+UseG1GC',
+        '-XX:+UnlockExperimentalVMOptions',
+        '-XX:MaxGCPauseMillis=100',
+        `-XX:ParallelGCThreads=${Math.max(1, Math.floor(phys / 2))}`,
+        '-XX:G1NewSizePercent=20',
+        '-XX:G1ReservePercent=20',
+        '-XX:InitiatingHeapOccupancyPercent=45',
+        `-XX:ActiveProcessorCount=${cores}`
+      ];
     } else {
-      return ['-XX:+UseG1GC', '-XX:+ParallelRefProcEnabled', '-XX:MaxGCPauseMillis=50', '-XX:+UnlockExperimentalVMOptions', '-XX:G1NewSizePercent=25', '-XX:G1ReservePercent=20', '-XX:InitiatingHeapOccupancyPercent=20', '-XX:SurvivorRatio=32', '-XX:MaxTenuringThreshold=1'];
+      return [
+        '-XX:+UseG1GC',
+        '-XX:+UnlockExperimentalVMOptions',
+        '-XX:MaxGCPauseMillis=50',
+        `-XX:ParallelGCThreads=${phys}`,
+        `-XX:ConcGCThreads=${Math.max(1, Math.floor(phys / 4))}`,
+        '-XX:G1NewSizePercent=30',
+        '-XX:G1ReservePercent=20',
+        '-XX:G1HeapRegionSize=16M',
+        '-XX:G1HeapWastePercent=5',
+        '-XX:G1MixedGCCountTarget=4',
+        '-XX:InitiatingHeapOccupancyPercent=40',
+        '-XX:SurvivorRatio=32',
+        '-XX:MaxTenuringThreshold=1',
+        '-XX:+ParallelRefProcEnabled',
+        `-XX:ActiveProcessorCount=${cores}`
+      ];
     }
   }
 

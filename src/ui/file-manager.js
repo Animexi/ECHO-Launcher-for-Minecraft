@@ -18,22 +18,17 @@ function joinPath(dir, file) {
 
 class FileManager {
   constructor() {
-    console.log('FileManager constructor called');
     this.currentPath = '';
     this.navigationHistory = [];
     this.historyIndex = -1;
     this.selectedItems = new Set();
     this.clipboard = null;
-    this.clipboardOperation = null; // 'copy' or 'cut'
-    this.viewMode = 'list'; // 'list' or 'grid'
+    this.clipboardOperation = null;
+    this.viewMode = 'list';
 
-    console.log('Initializing elements...');
     this.initializeElements();
-    console.log('Attaching event listeners...');
     this.attachEventListeners();
-    console.log('Loading root directory...');
     this.loadRootDirectory();
-    console.log('FileManager constructor finished');
   }
 
   initializeElements() {
@@ -98,8 +93,6 @@ class FileManager {
   }
 
   async loadRootDirectory() {
-    console.log('loadRootDirectory called');
-
     if (this.fileTree) {
       this.fileTree.innerHTML = '';
     }
@@ -108,10 +101,7 @@ class FileManager {
     }
 
     const result = await window.ipcRenderer.invoke('get-minecraft-root');
-    console.log('get-minecraft-root result:', result);
-
     if (result.success) {
-      console.log('Navigating to:', result.path);
       await this.navigateTo(result.path);
     } else {
       console.error('Failed to get root directory:', result.error);
@@ -120,12 +110,9 @@ class FileManager {
   }
 
   async navigateTo(dirPath) {
-    console.log('navigateTo called with:', dirPath);
     this.updateStatus(t('common_loading'));
 
     const result = await window.ipcRenderer.invoke('list-directory', dirPath);
-    console.log('list-directory result:', result);
-
     if (!result.success) {
       await CustomDialog.alert(t('file_manager_open_error', {error: result.error}), t('common_error_occurred'));
       return;
@@ -139,13 +126,10 @@ class FileManager {
 
     this.currentPath = dirPath;
     this.selectedItems.clear();
-
-    console.log('Updating UI with', result.files.length, 'files');
     this.updateNavigationButtons();
     this.updateBreadcrumb();
     this.renderFileList(result.files);
     this.updateStatus(t('files_items_count', {count: result.files.length}));
-    console.log('navigateTo finished');
   }
 
   navigateBack() {
@@ -230,9 +214,6 @@ class FileManager {
   }
 
   renderFileList(files) {
-    console.log('renderFileList called with', files.length, 'files');
-    console.log('fileListContent element:', this.fileListContent);
-
     const loadingSpinners = this.fileListContent.querySelectorAll('.loading-spinner');
     loadingSpinners.forEach(spinner => spinner.remove());
 
@@ -245,7 +226,6 @@ class FileManager {
           <span>${t('common_empty_folder')}</span>
         </div>
       `;
-      console.log('Showing empty state');
       return;
     }
 
@@ -255,24 +235,13 @@ class FileManager {
       }
       return a.name.localeCompare(b.name);
     });
-
-    console.log('Clearing fileListContent with innerHTML...');
     this.fileListContent.innerHTML = '';
-    console.log('After clear, innerHTML length:', this.fileListContent.innerHTML.length);
-    console.log('Rendering', files.length, 'items...');
-
-    files.forEach((file, index) => {
+    const fragment = document.createDocumentFragment();
+    files.forEach((file) => {
       const item = this.createFileItem(file);
-      this.fileListContent.appendChild(item);
-      if (index === 0) {
-        console.log('First item created:', item);
-        console.log('First item HTML:', item.outerHTML.substring(0, 200));
-      }
+      fragment.appendChild(item);
     });
-
-    console.log('renderFileList finished');
-    console.log('fileListContent children count:', this.fileListContent.children.length);
-    console.log('fileListContent innerHTML length:', this.fileListContent.innerHTML.length);
+    this.fileListContent.appendChild(fragment);
   }
 
   createFileItem(file) {
@@ -779,26 +748,15 @@ ${t('file_manager_properties_modified', {date: new Date(props.modified).toLocale
     }
   }
 }
-
-console.log('=== file-manager.js loaded ===');
-
 let fileManager;
 
 function initFileManagerNow() {
-  console.log('=== initFileManagerNow called ===');
   const filesTab = document.getElementById('filesTab');
   const fileTree = document.getElementById('fileTree');
   const fileListContent = document.getElementById('fileListContent');
-
-  console.log('Files tab:', filesTab ? 'FOUND' : 'NOT FOUND');
-  console.log('File tree:', fileTree ? 'FOUND' : 'NOT FOUND');
-  console.log('File list:', fileListContent ? 'FOUND' : 'NOT FOUND');
-
   if (filesTab && fileTree && fileListContent) {
     try {
-      console.log('Creating FileManager instance...');
       fileManager = new FileManager();
-      console.log('✓ File Manager initialized successfully');
       return true;
     } catch (error) {
       console.error('✗ Error initializing File Manager:', error);
