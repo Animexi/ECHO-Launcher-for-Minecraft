@@ -23,6 +23,40 @@ class MinecraftLauncher {
     this.initDirectories();
   }
 
+  // ---------- Helper methods for library deduplication ----------
+  // FIX: Extract group:artifact from a library entry
+  getLibraryGA(lib) {
+    if (!lib.name) return null;
+    const parts = lib.name.split(':');
+    if (parts.length >= 4) {
+      return `${parts[0]}:${parts[1]}:${parts[3]}`;
+    }
+    if (parts.length >= 2) {
+      return `${parts[0]}:${parts[1]}`;
+    }
+    return null;
+  }
+
+  // FIX: Get version string from a library entry
+  getLibraryVersion(lib) {
+    if (!lib.name) return '';
+    const parts = lib.name.split(':');
+    return parts.length >= 3 ? parts[2] : '';
+  }
+
+  // FIX: Compare two version strings (simple numeric dot-separated)
+  compareVersions(v1, v2) {
+    const a = v1.split('.').map(Number);
+    const b = v2.split('.').map(Number);
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      const n1 = a[i] || 0;
+      const n2 = b[i] || 0;
+      if (n1 !== n2) return n1 - n2;
+    }
+    return 0;
+  }
+  // --------------------------------------------------------------
+
   async initDirectories() {
     await fs.ensureDir(this.minecraftDir);
     await fs.ensureDir(this.versionsDir);
@@ -60,7 +94,12 @@ class MinecraftLauncher {
           if (parts.length >= 3) {
             const [group, artifact, version] = parts;
             const groupPath = group.replace(/\./g, '/');
-            const jarName = `${artifact}-${version}.jar`;
+            let jarName;
+            if (parts.length >= 4) {
+              jarName = `${artifact}-${version}-${parts[3]}.jar`;
+            } else {
+              jarName = `${artifact}-${version}.jar`;
+            }
             const libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
             if (!await fs.pathExists(libPath)) {
               await fs.ensureDir(path.dirname(libPath));
@@ -68,7 +107,11 @@ class MinecraftLauncher {
                 const libUrl = `${library.url}${groupPath}/${artifact}/${version}/${jarName}`;
                 const libData = await axios.get(libUrl, { responseType: 'arraybuffer', timeout: 30000 });
                 await fs.writeFile(libPath, libData.data);
-              } catch (e) {}
+              } catch (e) {
+                if (parts.length < 4) {
+                  console.warn(`Failed to download Fabric lib ${library.name}:`, e.message);
+                }
+              }
             }
           }
         }
@@ -89,28 +132,33 @@ class MinecraftLauncher {
     return JSON.stringify(lib);
   }
 
-  async resolveVersion(versionId) {
-    const versionJsonPath = path.join(this.versionsDir, versionId, `${versionId}.json`);
-    if (!await fs.pathExists(versionJsonPath)) {
-      throw new Error(`Version ${versionId} not found`);
-    }
-    const versionJson = await fs.readJson(versionJsonPath);
-    return this.mergeVersion(versionJson);
-  }
-
+  // FIX: Completely rewritten mergeVersion to deduplicate libraries by group:artifact (keep newest)
   async mergeVersion(json) {
     let result = { ...json };
     let current = json;
     const processedParents = new Set();
+    const allLibraries = []; // will hold all libraries from all levels
+
+    // Helper to add libraries from a version object
+    const addLibraries = (versionObj) => {
+      if (versionObj.libraries) {
+        for (const lib of versionObj.libraries) {
+          allLibraries.push(lib);
+        }
+      }
+    };
+
+    addLibraries(current);
+
     while (current.inheritsFrom && !processedParents.has(current.inheritsFrom)) {
       const parentId = current.inheritsFrom;
       processedParents.add(parentId);
       const parentJsonPath = path.join(this.versionsDir, parentId, `${parentId}.json`);
       if (!await fs.pathExists(parentJsonPath)) break;
       const parentJson = await fs.readJson(parentJsonPath);
-      const existingKeys = new Set((result.libraries || []).map(lib => this.getLibraryKey(lib)));
-      const parentLibraries = (parentJson.libraries || []).filter(lib => !existingKeys.has(this.getLibraryKey(lib)));
-      result.libraries = [...parentLibraries, ...(result.libraries || [])];
+      addLibraries(parentJson);
+
+      // Merge other fields (mainClass, assetIndex, etc.) as before
       if (!result.mainClass && parentJson.mainClass) result.mainClass = parentJson.mainClass;
       if (!result.assetIndex && parentJson.assetIndex) result.assetIndex = parentJson.assetIndex;
       if (!result.assets && parentJson.assets) result.assets = parentJson.assets;
@@ -118,9 +166,42 @@ class MinecraftLauncher {
       if (!result.arguments && parentJson.arguments) result.arguments = parentJson.arguments;
       if (!result.minecraftArguments && parentJson.minecraftArguments) result.minecraftArguments = parentJson.minecraftArguments;
       if (!result.type && parentJson.type) result.type = parentJson.type;
+
       current = parentJson;
     }
+
+    // Deduplicate allLibraries by group:artifact, keep highest version
+    const dedupMap = new Map();
+    for (const lib of allLibraries) {
+      const ga = this.getLibraryGA(lib);
+      if (!ga) {
+        // If no group:artifact, keep as-is (fallback)
+        dedupMap.set(JSON.stringify(lib), lib);
+        continue;
+      }
+      const existing = dedupMap.get(ga);
+      if (!existing) {
+        dedupMap.set(ga, lib);
+      } else {
+        const existingVer = this.getLibraryVersion(existing);
+        const newVer = this.getLibraryVersion(lib);
+        if (this.compareVersions(newVer, existingVer) > 0) {
+          dedupMap.set(ga, lib); // keep newer
+        }
+      }
+    }
+
+    result.libraries = Array.from(dedupMap.values());
     return result;
+  }
+
+  async resolveVersion(versionId) {
+    const versionJsonPath = path.join(this.versionsDir, versionId, `${versionId}.json`);
+    if (!await fs.pathExists(versionJsonPath)) {
+      throw new Error(`Version ${versionId} not found`);
+    }
+    const versionJson = await fs.readJson(versionJsonPath);
+    return this.mergeVersion(versionJson);
   }
 
   async downloadMissingLibraries(versionJson) {
@@ -148,6 +229,13 @@ class MinecraftLauncher {
           const jarName = `${artifact}-${version}.jar`;
           libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
           downloadUrl = `https://repo1.maven.org/maven2/${groupPath}/${artifact}/${version}/${jarName}`;
+        }
+      }
+      if (!libPath && library.downloads && library.downloads.classifiers) {
+        const nativeKey = 'natives-windows';
+        if (library.downloads.classifiers[nativeKey]) {
+          libPath = path.join(this.librariesDir, library.downloads.classifiers[nativeKey].path);
+          downloadUrl = library.downloads.classifiers[nativeKey].url;
         }
       }
       if (libPath && downloadUrl && !await fs.pathExists(libPath)) {
@@ -415,8 +503,11 @@ class MinecraftLauncher {
       await fs.ensureDir(assetsSkinsDir);
       await fs.copy(skinPath, path.join(assetsSkinsDir, `${username}.png`));
     }
-    const libraries = [];
+    let libraries = [];
     for (const library of resolvedJson.libraries || []) {
+      const libName = library.name || '';
+      const isNativeLib = libName.match(/:natives-/) || (libName.match(/:(natives-windows|natives-linux|natives-macos)/));
+      if (isNativeLib) continue;
       let libPath = null;
       if (library.downloads && library.downloads.artifact) libPath = path.join(this.librariesDir, library.downloads.artifact.path);
       else if (library.name) {
@@ -432,23 +523,67 @@ class MinecraftLauncher {
     }
     const jarPath = path.join(this.versionsDir, version, `${version}.jar`);
     libraries.push(jarPath);
-    const classpath = libraries.join(path.delimiter);
-    const nativesDir = path.join(this.minecraftDir, 'natives', `${version}-${Date.now()}`);
-    await fs.ensureDir(nativesDir);
-    for (const library of resolvedJson.libraries || []) {
-      if (library.downloads && library.downloads.classifiers) {
-        const nativeKey = 'natives-windows';
-        if (library.downloads.classifiers[nativeKey]) {
-          const nativePath = path.join(this.librariesDir, library.downloads.classifiers[nativeKey].path);
-          if (await fs.pathExists(nativePath)) {
-            try { await extract(nativePath, { dir: nativesDir }); } catch (e) {}
-          }
+
+    const seen = new Set();
+    const uniqueLibraries = [];
+    for (const libPath of libraries) {
+      const relative = path.relative(this.librariesDir, libPath);
+      const parts = relative.split(path.sep);
+      if (parts.length >= 4) {
+        const group = parts.slice(0, -3).join('.');
+        const artifact = parts[parts.length - 3];
+        const key = `${group}:${artifact}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueLibraries.push(libPath);
         }
+      } else {
+        uniqueLibraries.push(libPath);
       }
     }
+    libraries = uniqueLibraries;
+
+    const classpath = libraries.join(path.delimiter);
+
+    const nativesDir = path.join(this.minecraftDir, 'natives', `${version}-${Date.now()}`);
+    await fs.ensureDir(nativesDir);
+    const nativeLibs = [];
+    for (const library of resolvedJson.libraries || []) {
+      const libName = library.name || '';
+      const isNativeWindows = libName.endsWith(':natives-windows') || libName.endsWith(':natives-windows-arm64') || libName.endsWith(':natives-windows-x86');
+      let nativeJarPath = null;
+      if (isNativeWindows && library.downloads && library.downloads.artifact && library.downloads.artifact.path) {
+        nativeJarPath = path.join(this.librariesDir, library.downloads.artifact.path);
+      } else if (isNativeWindows && library.downloads && library.downloads.classifiers) {
+        const nativeKey = 'natives-windows';
+        if (library.downloads.classifiers[nativeKey]) {
+          nativeJarPath = path.join(this.librariesDir, library.downloads.classifiers[nativeKey].path);
+        }
+      } else if (library.downloads && library.downloads.classifiers) {
+        const nativeKey = 'natives-windows';
+        if (library.downloads.classifiers[nativeKey]) {
+          nativeJarPath = path.join(this.librariesDir, library.downloads.classifiers[nativeKey].path);
+        }
+      }
+      if (nativeJarPath && await fs.pathExists(nativeJarPath)) {
+        nativeLibs.push({ name: libName, path: nativeJarPath });
+      } else if (isNativeWindows) {
+        console.warn(`Native JAR missing: ${libName} at ${nativeJarPath}`);
+      }
+    }
+    for (const nativeLib of nativeLibs) {
+      try {
+        await extract(nativeLib.path, { dir: nativesDir });
+        console.log(`Extracted native: ${nativeLib.name}`);
+      } catch (e) {
+        console.warn(`Failed to extract native ${nativeLib.name}:`, e.message);
+      }
+    }
+    const extractedNativeFiles = await fs.readdir(nativesDir).catch(() => []);
+    console.log(`Natives directory (${nativesDir}): ${extractedNativeFiles.length} files extracted`);
     await this.downloadAuthlibInjector();
 
-    const mcVersion = version.split('-')[0]; // Extract base version (e.g., "1.20.1" from "1.20.1-fabric-0.14.21")
+    const mcVersion = version.split('-')[0];
     let javaPath = null;
 
     if (preferredJava) {
@@ -498,7 +633,6 @@ class MinecraftLauncher {
 
     console.log(`Using Java: ${javaPath}`);
 
-    // Автоматически применяем настройки GPU для высокой производительности
     try {
       console.log('Applying GPU settings for Java...');
       const gpuResult = await this.gpuSettings.setJavaGPUPreference(javaPath, 'high-performance');
