@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const MinecraftLauncher = require('./launcher/MinecraftLauncher');
 const ModLoaderAPI = require('./launcher/ModLoaderAPI');
@@ -8,6 +8,7 @@ const AccountManager = require('./launcher/AccountManager');
 const JavaManager = require('./launcher/JavaManager');
 const ModrinthAPI = require('./launcher/ModrinthAPI');
 const ModpackInstaller = require('./launcher/ModpackInstaller');
+const DiscordRPCManager = require('./utils/DiscordRPC');
 const { bt } = require('./localization/backend-translations');
 
 let mainWindow;
@@ -21,6 +22,9 @@ const javaManager = new JavaManager();
 const modrinthAPI = new ModrinthAPI();
 const modpackInstaller = new ModpackInstaller();
 const runningInstances = new Map();
+const discordRPC = new DiscordRPCManager();
+let tray = null;
+let isGameRunning = false;
 
 async function checkFirstRun() {
   const fs = require('fs-extra');
@@ -80,9 +84,49 @@ function createWindow() {
   mainWindow.loadFile('src/ui/index.html');
   mainWindow.webContents.setBackgroundThrottling(true);
   if (process.argv.includes('--dev')) mainWindow.webContents.openDevTools();
+
+  mainWindow.on('close', (e) => {
+    if (isGameRunning) {
+      e.preventDefault();
+      mainWindow.hide();
+      showTray();
+    }
+  });
+}
+
+function showTray() {
+  if (tray) return;
+  const iconPath = path.join(__dirname, '../icon.png');
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+  tray = new Tray(icon);
+  tray.setToolTip('ECHO Launcher — игра запущена');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Открыть ECHO Launcher', click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } } },
+    { type: 'separator' },
+    { label: 'Выход', click: () => { isGameRunning = false; discordRPC.destroy(); app.quit(); } }
+  ]));
+  tray.on('double-click', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } });
+}
+
+function hideTray() {
+  if (tray) {
+    tray.destroy();
+    tray = null;
+  }
+}
+
+function setGameRunning(running) {
+  isGameRunning = running;
+  if (!running) hideTray();
 }
 
 app.whenReady().then(async () => {
+  try {
+    const config = await launcher.getConfig();
+    if (config.discordClientId) {
+      await discordRPC.init(config.discordClientId);
+    }
+  } catch (e) {}
   const isFirstRun = await checkFirstRun();
   if (isFirstRun) {
     createWelcomeWindow();
@@ -90,7 +134,8 @@ app.whenReady().then(async () => {
     createWindow();
   }
 });
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => { if (process.platform !== 'darwin' && !isGameRunning) app.quit(); });
+app.on('before-quit', () => { discordRPC.destroy(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 
 ipcMain.handle('get-versions', async () => await launcher.getAvailableVersions());
@@ -114,12 +159,159 @@ ipcMain.handle('launch-game', async (event, config) => {
       startTime: new Date().toISOString(),
       sessionId: sessionId
     });
+
+    const gameStartTime = new Date();
+    const mcVersion = config.version.split('-')[0];
+    const loaderType = config.version.includes('-forge-') ? 'Forge' :
+      config.version.includes('-fabric-') ? 'Fabric' :
+      config.version.includes('-optifine-') ? 'OptiFine' :
+      config.version.includes('-neoforge-') ? 'NeoForge' :
+      config.version.includes('-quilt-') ? 'Quilt' : 'Vanilla';
+    const versionDisplay = config.version.includes('-') ? `${mcVersion} (${loaderType})` : mcVersion;
+
+    const launcherConfig = await launcher.getConfig();
+    if (launcherConfig.discordClientId && discordRPC.connected) {
+      discordRPC.setActivity({
+        details: `Играет как ${config.username}`,
+        state: 'Загрузка...',
+        largeImageKey: launcherConfig.discordLargeImage || 'echo_logo',
+        largeImageText: 'ECHO Launcher',
+        smallImageKey: launcherConfig.discordSmallImage || 'minecraft',
+        smallImageText: versionDisplay,
+        startTimestamp: gameStartTime,
+      });
+    }
+
+    let stdoutBuffer = '';
+    let stderrBuffer = '';
+    let gameMode = 'unknown';
+    let detectedServer = null;
+    let serverPlayers = null;
+
+    const updateDiscordPresence = (state) => {
+      if (!launcherConfig.discordClientId || !discordRPC.connected) return;
+      discordRPC.updateActivity({
+        details: `Играет как ${config.username}`,
+        state: state,
+        smallImageText: versionDisplay,
+      });
+    };
+
+    setTimeout(() => {
+      if (gameMode === 'unknown') {
+        gameMode = 'singleplayer';
+        updateDiscordPresence('В одиночной игре');
+      }
+    }, 15000);
+
+    const processLine = (line) => {
+      const clean = line.replace(/\x1b\[[0-9;]*m/g, '').trim();
+      if (!clean) return;
+
+      if (clean.includes('Disconnecting from server') || clean.includes('Lost connection to server') || clean.includes('Connection closed') || clean.includes('Disconnected from server')) {
+        gameMode = 'unknown';
+        detectedServer = null;
+        serverPlayers = null;
+        updateDiscordPresence('В главном меню');
+        return;
+      }
+
+      if (clean.includes('Stopping server') || clean.includes('Stopping singleplayer server')) {
+        if (gameMode === 'singleplayer') {
+          gameMode = 'unknown';
+          updateDiscordPresence('В главном меню');
+        }
+        return;
+      }
+
+      if (clean.includes('Stopping!')) {
+        gameMode = 'unknown';
+        detectedServer = null;
+        serverPlayers = null;
+        updateDiscordPresence('В главном меню');
+        return;
+      }
+
+      if (clean.includes('Starting integrated server') || clean.includes('Preparing start of integrated server')) {
+        gameMode = 'singleplayer';
+        updateDiscordPresence('В одиночной игре');
+        return;
+      }
+
+      const worldMatch = clean.match(/Preparing level "([^"]+)"/);
+      if (worldMatch) {
+        gameMode = 'singleplayer';
+        updateDiscordPresence(`В одиночной игре — ${worldMatch[1]}`);
+        return;
+      }
+
+      const connectMatch = clean.match(/Connecting to ([\w.\-]+),\s*(\d+)/);
+      if (connectMatch) {
+        gameMode = 'multiplayer';
+        detectedServer = connectMatch[1];
+        updateDiscordPresence(`На сервере ${detectedServer}`);
+        return;
+      }
+
+      const loginMatch = clean.match(/Logging in to ([\w.\-]+)/);
+      if (loginMatch) {
+        gameMode = 'multiplayer';
+        detectedServer = loginMatch[1];
+        updateDiscordPresence(`На сервере ${detectedServer}`);
+        return;
+      }
+
+      const playerCountMatch = clean.match(/There are (\d+)\/(\d+) players online/);
+      if (playerCountMatch) {
+        serverPlayers = `${playerCountMatch[1]}/${playerCountMatch[2]}`;
+        if (gameMode === 'multiplayer' && detectedServer) {
+          updateDiscordPresence(`На сервере ${detectedServer} — ${serverPlayers} игроков`);
+        }
+        return;
+      }
+
+      const serverDone = clean.match(/\[Server thread\/INFO\]:\s*Done/);
+      if (serverDone && gameMode !== 'multiplayer') {
+        if (gameMode === 'unknown') {
+          gameMode = 'singleplayer';
+          updateDiscordPresence('В одиночной игре');
+        }
+        return;
+      }
+
+      if (gameMode === 'multiplayer' && clean.includes('multiplayer.server.name')) {
+        const nameMatch = clean.match(/multiplayer\.server\.name[=:]\s*(.+)/);
+        if (nameMatch) {
+          detectedServer = nameMatch[1].trim();
+          updateDiscordPresence(`На сервере ${detectedServer}${serverPlayers ? ' — ' + serverPlayers + ' игроков' : ''}`);
+        }
+        return;
+      }
+    };
+
+    result.process.stdout.on('data', (data) => {
+      stdoutBuffer += data.toString('utf8');
+      const lines = stdoutBuffer.split('\n');
+      stdoutBuffer = lines.pop();
+      for (const line of lines) processLine(line);
+    });
+
+    result.process.stderr.on('data', (data) => {
+      stderrBuffer += data.toString('utf8');
+      const lines = stderrBuffer.split('\n');
+      stderrBuffer = lines.pop();
+      for (const line of lines) processLine(line);
+    });
+
     result.process.on('exit', async (code) => {
       console.log(`Process ${result.pid} exited with code ${code}`);
+      discordRPC.clearActivity();
+      setGameRunning(false);
       await statsManager.recordGameEnd(sessionId);
       runningInstances.delete(instanceId);
       mainWindow.webContents.send('instance-stopped', instanceId);
     });
+    setGameRunning(true);
     mainWindow.webContents.send('instance-started', { id: instanceId, pid: result.pid, version: config.version });
     return { success: true, pid: result.pid, instanceId };
   }
@@ -184,6 +376,31 @@ ipcMain.handle('get-system-memory', () => {
   return { totalMemoryMB, freeMemoryMB, maxAllocation: Math.floor(maxAllocation), recommendedAllocation };
 });
 ipcMain.handle('save-config', async (event, config) => await launcher.saveConfig(config));
+ipcMain.handle('discord-set-client-id', async (event, clientId) => {
+  try {
+    const config = await launcher.getConfig();
+    config.discordClientId = clientId;
+    await launcher.saveConfig(config);
+    if (clientId) {
+      await discordRPC.init(clientId);
+    } else {
+      discordRPC.destroy();
+    }
+    return { success: true };
+  } catch (error) { return { success: false, error: error.message }; }
+});
+ipcMain.handle('discord-get-status', async () => {
+  return { connected: discordRPC.connected, clientId: discordRPC.clientId };
+});
+ipcMain.handle('discord-set-images', async (event, largeImage, smallImage) => {
+  try {
+    const config = await launcher.getConfig();
+    if (largeImage !== undefined) config.discordLargeImage = largeImage;
+    if (smallImage !== undefined) config.discordSmallImage = smallImage;
+    await launcher.saveConfig(config);
+    return { success: true };
+  } catch (error) { return { success: false, error: error.message }; }
+});
 ipcMain.handle('open-folder', async (event, folder) => {
   const { shell } = require('electron');
   const os = require('os');
