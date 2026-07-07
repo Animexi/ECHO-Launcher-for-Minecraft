@@ -232,10 +232,11 @@ class AccountManager {
     const hex = '0123456789abcdef';
     let uuid = '';
     for (let i = 0; i < 32; i++) {
-      uuid += hex[Math.floor(Math.random() * 16)];
-      if (i === 7 || i === 11 || i === 15 || i === 19) {
-        uuid += '-';
-      }
+      let r = Math.floor(Math.random() * 16);
+      if (i === 12) r = 4;
+      else if (i === 16) r = (r & 0x3) | 0x8;
+      uuid += hex[r];
+      if (i === 7 || i === 11 || i === 15 || i === 19) uuid += '-';
     }
     return uuid;
   }

@@ -1,5 +1,29 @@
 const axios = require('axios');
 
+const CATEGORY_TRANSLATIONS = {
+  ru: {
+    adventure: 'Приключения', cursed: 'Проклятые', decoration: 'Декор', economy: 'Экономика',
+    equipment: 'Снаряжение', food: 'Еда', fortune: 'Удача', gameplay: 'Геймплей',
+    technology: 'Технологии', magic: 'Магия', management: 'Управление', minimap: 'Мини-карта',
+    mobs: 'Мобы', optimization: 'Оптимизация', social: 'Социальное', storage: 'Хранилище',
+    transport: 'Транспорт', utility: 'Утилиты', worldgen: 'Генерация мира',
+    'cosmetic': 'Косметика', 'library-and-api': 'Библиотека/API',
+    'forge': 'Forge', 'fabric': 'Fabric', 'neoforge': 'NeoForge', 'quilt': 'Quilt',
+    'bukkit': 'Bukkit', 'spigot': 'Spigot', 'paper': 'Paper', 'bungeecord': 'BungeeCord',
+    'velocity': 'Velocity', 'liteloader': 'LiteLoader', 'modloader': 'Mod Loader',
+    'architectury': 'Architectury', 'rift': 'Rift',
+    'themed': 'Тематические', 'vanilla-like': 'Как ванильные', 'realistic': 'Реалистичные',
+    'cute': 'Милые', 'fantasy': 'Фэнтези', 'modern': 'Современные',
+    'resolution-8x': '8x', 'resolution-16x': '16x', 'resolution-32x': '32x',
+    'resolution-64x': '64x', 'resolution-128x': '128x', 'resolution-256x': '256x', 'resolution-512x': '512x',
+    'lighting': 'Освещение', 'performance': 'Производительность', 'realistic-shaders': 'Реалистичные',
+    'stylized': 'Стилизованные',
+    'modpack': 'Модпаки', 'mod': 'Моды', 'resourcepack': 'Ресурспаки', 'shader': 'Шейдеры',
+    'data-pack': 'Датапаки',
+    '64x-512x': '64x-512x', '16x-32x': '16x-32x',
+  }
+};
+
 class ModrinthAPI {
   constructor() {
     this.baseUrl = 'https://api.modrinth.com/v2';
@@ -63,8 +87,17 @@ class ModrinthAPI {
         }
       }
 
+      if (filters.loader && filters.loader !== '') {
+        facets.push([`categories:${filters.loader.toLowerCase()}`]);
+      }
+
       if (filters.category && filters.category !== '') {
         facets.push([`categories:${filters.category}`]);
+      }
+
+      if (filters.projectType && filters.projectType !== projectType) {
+        facets = facets.filter(f => !f[0].startsWith('project_type:'));
+        facets.push([`project_type:${filters.projectType}`]);
       }
 
       params.append('query', query || '');
@@ -87,6 +120,48 @@ class ModrinthAPI {
     } catch (error) {
       console.error('Modrinth search error:', error);
       return { success: false, error: error.message, hits: [], total: 0 };
+    }
+  }
+
+  async getCategories(projectType, lang) {
+    try {
+      const cacheKey = `categories_${projectType}`;
+      if (this._categoryCache && this._categoryCache[cacheKey]) {
+        return this._categoryCache[cacheKey].map(c => ({
+          ...c,
+          translatedName: (CATEGORY_TRANSLATIONS[lang] && CATEGORY_TRANSLATIONS[lang][c.name]) || c.name
+        }));
+      }
+      const response = await axios.get(`${this.baseUrl}/tag/category`, {
+        headers: { 'User-Agent': this.userAgent }
+      });
+      const allCategories = response.data;
+      const filtered = allCategories.filter(c => {
+        return c.project_type === projectType;
+      });
+      if (!this._categoryCache) this._categoryCache = {};
+      this._categoryCache[cacheKey] = filtered;
+      return filtered.map(c => ({
+        ...c,
+        translatedName: (CATEGORY_TRANSLATIONS[lang] && CATEGORY_TRANSLATIONS[lang][c.name]) || c.name
+      }));
+    } catch (error) {
+      console.error('Modrinth categories error:', error);
+      return [];
+    }
+  }
+
+  async getTags() {
+    try {
+      if (this._tagsCache) return this._tagsCache;
+      const response = await axios.get(`${this.baseUrl}/tag/loader`, {
+        headers: { 'User-Agent': this.userAgent }
+      });
+      this._tagsCache = response.data;
+      return this._tagsCache;
+    } catch (error) {
+      console.error('Modrinth tags error:', error);
+      return [];
     }
   }
 

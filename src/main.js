@@ -9,6 +9,7 @@ const JavaManager = require('./launcher/JavaManager');
 const ModrinthAPI = require('./launcher/ModrinthAPI');
 const ModpackInstaller = require('./launcher/ModpackInstaller');
 const DiscordRPCManager = require('./utils/DiscordRPC');
+const JavaDiagnostics = require('./utils/JavaDiagnostics');
 const { bt } = require('./localization/backend-translations');
 
 let mainWindow;
@@ -23,6 +24,7 @@ const modrinthAPI = new ModrinthAPI();
 const modpackInstaller = new ModpackInstaller();
 const runningInstances = new Map();
 const discordRPC = new DiscordRPCManager();
+const javaDiagnostics = new JavaDiagnostics();
 let tray = null;
 let isGameRunning = false;
 
@@ -45,7 +47,7 @@ async function markFirstRunComplete() {
 function createWelcomeWindow() {
   welcomeWindow = new BrowserWindow({
     width: 900,
-    height: 700,
+    height: 800,
     frame: false,
     transparent: false,
     backgroundColor: '#0a0a0a',
@@ -69,7 +71,7 @@ function createWelcomeWindow() {
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
-    height: 750,
+    height: 850,
     frame: false,
     transparent: false,
     backgroundColor: '#0a0a0a',
@@ -495,6 +497,35 @@ ipcMain.handle('kill-instance', async (event, instanceId) => {
   return { success: false, error: 'Instance not found' };
 });
 ipcMain.handle('check-version-ready', async (event, versionId) => await launcher.isVersionFullyDownloaded(versionId));
+ipcMain.handle('scan-mod-dependencies', async (event, versionId) => {
+  try {
+    const os = require('os');
+    const fs = require('fs-extra');
+    const isModpack = await fs.pathExists(path.join(os.homedir(), '.minecraft_custom', 'versions', versionId, 'modpack.json'));
+    let modsDir;
+    if (isModpack) {
+      modsDir = path.join(os.homedir(), '.minecraft_custom', 'versions', versionId, 'mods');
+    } else {
+      const settingsPath = path.join(os.homedir(), '.minecraft_custom', 'isolation_settings.json');
+      let isolatedVersions = [];
+      if (await fs.pathExists(settingsPath)) {
+        try { isolatedVersions = await fs.readJson(settingsPath); } catch (e) {}
+      }
+      if (isolatedVersions.includes(versionId)) {
+        modsDir = path.join(os.homedir(), '.minecraft_custom', 'instances', versionId, 'mods');
+      } else {
+        modsDir = path.join(os.homedir(), '.minecraft_custom', 'mods');
+      }
+    }
+    const mcVersion = versionId.split('-')[0];
+    const result = await launcher.scanModDependencies(modsDir, mcVersion, (progress) => {
+      if (mainWindow) mainWindow.webContents.send('mod-dependency-progress', progress);
+    });
+    return { success: true, ...result };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
 ipcMain.handle('open-instance-folder', async (event, versionId) => {
   const { shell } = require('electron');
   const os = require('os');
@@ -537,7 +568,7 @@ ipcMain.handle('toggle-isolation', async (event, data) => {
   const minecraftDir = path.join(os.homedir(), '.minecraft_custom');
   const sharedDir = minecraftDir;
   const isolatedDir = path.join(minecraftDir, 'instances', version);
-  const foldersToMigrate = ['saves', 'mods', 'resourcepacks', 'shaderpacks', 'screenshots', 'config', 'logs'];
+  const foldersToMigrate = ['resourcepacks', 'screenshots', 'config', 'logs'];
   try {
     if (isolated) {
       await fs.ensureDir(isolatedDir);
@@ -554,6 +585,9 @@ ipcMain.handle('toggle-isolation', async (event, data) => {
           }
         } else await fs.ensureDir(targetPath);
       }
+      await fs.ensureDir(path.join(isolatedDir, 'mods'));
+      await fs.ensureDir(path.join(isolatedDir, 'saves'));
+      await fs.ensureDir(path.join(isolatedDir, 'shaderpacks'));
     } else {
       if (await fs.pathExists(isolatedDir)) {
         for (const folder of foldersToMigrate) {
@@ -579,9 +613,9 @@ ipcMain.handle('toggle-fullscreen', () => {
 });
 ipcMain.handle('resize-launcher', () => {
   const currentSize = mainWindow.getSize();
-  if (currentSize[0] === 1000) mainWindow.setSize(1200, 750);
-  else if (currentSize[0] === 1200) mainWindow.setSize(1400, 850);
-  else mainWindow.setSize(1000, 650);
+  if (currentSize[0] === 1000) mainWindow.setSize(1200, 850);
+  else if (currentSize[0] === 1200) mainWindow.setSize(1400, 950);
+  else mainWindow.setSize(1000, 750);
   mainWindow.center();
   return { success: true };
 });
@@ -807,6 +841,25 @@ ipcMain.handle('open-logs-folder', async () => {
   }
 });
 
+ipcMain.handle('export-logs', async (event, logContent) => {
+  try {
+    const { dialog } = require('electron');
+    const fs = require('fs-extra');
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export Logs',
+      defaultPath: path.join(os.homedir(), 'Desktop', `minecraft_logs_${new Date().toISOString().slice(0,10)}.txt`),
+      filters: [{ name: 'Text Files', extensions: ['txt'] }]
+    });
+    if (!result.canceled && result.filePath) {
+      await fs.writeFile(result.filePath, logContent, 'utf8');
+      return { success: true };
+    }
+    return { success: false };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('analyze-logs', async () => {
   try {
     const fs = require('fs-extra');
@@ -937,6 +990,32 @@ ipcMain.handle('java-get-required-version', async (event, minecraftVersion) => {
     return { success: true, version: requiredVersion };
   } catch (error) { return { success: false, error: error.message }; }
 });
+ipcMain.handle('run-diagnostics', async () => {
+  try {
+    const results = await javaDiagnostics.runDiagnostics();
+    return { success: true, ...results };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+ipcMain.handle('auto-fix-java', async () => {
+  try {
+    const results = await javaDiagnostics.autoFixJavaIssues();
+    return results;
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+ipcMain.handle('check-mod-compatibility', async (event, versionId) => {
+  try {
+    const os = require('os');
+    const versionDir = path.join(os.homedir(), '.minecraft_custom', 'versions', versionId);
+    const results = await javaDiagnostics.checkModCompatibility(versionDir);
+    return { success: true, ...results };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
 ipcMain.handle('complete-first-setup', async () => {
   try {
     await markFirstRunComplete();
@@ -978,8 +1057,7 @@ ipcMain.handle('modrinth-download-mod', async (event, downloadUrl, fileName, tar
         try { isolatedVersions = await fs.readJson(settingsPath); } catch (e) {}
       }
       if (isolatedVersions.includes(targetVersion)) {
-        const versionDir = path.join(os.homedir(), '.minecraft_custom', 'versions', targetVersion);
-        modsDir = path.join(versionDir, 'mods');
+        modsDir = path.join(os.homedir(), '.minecraft_custom', 'instances', targetVersion, 'mods');
       } else {
         modsDir = path.join(os.homedir(), '.minecraft_custom', 'mods');
       }
@@ -1001,6 +1079,32 @@ ipcMain.handle('modrinth-search-content', async (event, query, projectType, filt
     return await modrinthAPI.searchContent(query, projectType, filters);
   } catch (error) {
     return { success: false, error: error.message, hits: [], total: 0 };
+  }
+});
+ipcMain.handle('modrinth-get-categories', async (event, projectType) => {
+  try {
+    const fs = require('fs-extra');
+    const os = require('os');
+    let lang = 'ru';
+    try {
+      const configPath = path.join(os.homedir(), '.minecraft_custom', 'launcher_config.json');
+      if (await fs.pathExists(configPath)) {
+        const config = await fs.readJson(configPath);
+        if (config.language) lang = config.language;
+      }
+    } catch (e) {}
+    const categories = await modrinthAPI.getCategories(projectType, lang);
+    return { success: true, categories };
+  } catch (error) {
+    return { success: false, error: error.message, categories: [] };
+  }
+});
+ipcMain.handle('modrinth-get-tags', async () => {
+  try {
+    const tags = await modrinthAPI.getTags();
+    return { success: true, tags };
+  } catch (error) {
+    return { success: false, error: error.message, tags: [] };
   }
 });
 ipcMain.handle('modrinth-install-modpack', async (event, projectId, downloadUrl, fileName, gameVersions) => {
@@ -1046,8 +1150,7 @@ ipcMain.handle('modrinth-download-resourcepack', async (event, downloadUrl, file
         try { isolatedVersions = await fs.readJson(settingsPath); } catch (e) {}
       }
       if (isolatedVersions.includes(targetVersion)) {
-        const versionDir = path.join(os.homedir(), '.minecraft_custom', 'versions', targetVersion);
-        resourcepacksDir = path.join(versionDir, 'resourcepacks');
+        resourcepacksDir = path.join(os.homedir(), '.minecraft_custom', 'instances', targetVersion, 'resourcepacks');
       } else {
         resourcepacksDir = path.join(os.homedir(), '.minecraft_custom', 'resourcepacks');
       }
@@ -1076,8 +1179,7 @@ ipcMain.handle('modrinth-download-shader', async (event, downloadUrl, fileName, 
         try { isolatedVersions = await fs.readJson(settingsPath); } catch (e) {}
       }
       if (isolatedVersions.includes(targetVersion)) {
-        const versionDir = path.join(os.homedir(), '.minecraft_custom', 'versions', targetVersion);
-        shadersDir = path.join(versionDir, 'shaderpacks');
+        shadersDir = path.join(os.homedir(), '.minecraft_custom', 'instances', targetVersion, 'shaderpacks');
       } else {
         shadersDir = path.join(os.homedir(), '.minecraft_custom', 'shaderpacks');
       }
@@ -1229,10 +1331,29 @@ ipcMain.handle('delete-items', async (event, data) => {
 ipcMain.handle('create-folder', async (event, data) => {
   try {
     const fs = require('fs-extra');
-    const { path: dirPath, name } = data;
-    const newFolderPath = path.join(dirPath, name);
+    const folderPath = path.join(data.path, data.name);
+    await fs.ensureDir(folderPath);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
 
-    await fs.ensureDir(newFolderPath);
+ipcMain.handle('copy-external-files', async (event, data) => {
+  try {
+    const fs = require('fs-extra');
+    const { files, destination } = data;
+    await fs.ensureDir(destination);
+    for (const filePath of files) {
+      const fileName = path.basename(filePath);
+      const destPath = path.join(destination, fileName);
+      const stats = await fs.stat(filePath);
+      if (stats.isDirectory()) {
+        await fs.copy(filePath, destPath);
+      } else {
+        await fs.copyFile(filePath, destPath);
+      }
+    }
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
@@ -1255,6 +1376,34 @@ ipcMain.handle('get-item-properties', async (event, itemPath) => {
         modified: stats.mtime.getTime()
       }
     };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('read-file-text', async (event, filePath) => {
+  try {
+    const fs = require('fs-extra');
+    const stats = await fs.stat(filePath);
+    if (stats.size > 5 * 1024 * 1024) {
+      const buffer = Buffer.alloc(5 * 1024 * 1024);
+      const fd = await fs.open(filePath, 'r');
+      await fd.read(buffer, 0, 5 * 1024 * 1024, 0);
+      await fd.close();
+      return { success: true, content: buffer.toString('utf8') + '\n\n... (файл обрезан, слишком большой)' };
+    }
+    const content = await fs.readFile(filePath, 'utf8');
+    return { success: true, content };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('write-file-text', async (event, filePath, content) => {
+  try {
+    const fs = require('fs-extra');
+    await fs.writeFile(filePath, content, 'utf8');
+    return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
   }

@@ -512,21 +512,45 @@ function setupEventListeners() {
 
   const memorySlider = document.getElementById('memorySlider');
   const memoryInput = document.getElementById('memoryInput');
+  const memoryValueDisplay = document.getElementById('memoryValueDisplay');
+  
+  function updateMemoryDisplay(value) {
+    if (memoryValueDisplay) memoryValueDisplay.textContent = `${value} MB`;
+    document.querySelectorAll('.memory-preset-btn').forEach(btn => {
+      if (parseInt(btn.dataset.value) === parseInt(value)) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+  }
+
   if (memorySlider) memorySlider.addEventListener('input', (e) => {
     if (memoryInput) memoryInput.value = e.target.value;
     currentConfig.memory = parseInt(e.target.value);
     updateSliderFill(memorySlider);
+    updateMemoryDisplay(e.target.value);
     autoSaveConfig();
   });
   if (memoryInput) memoryInput.addEventListener('input', (e) => {
     if (memorySlider) memorySlider.value = e.target.value;
     currentConfig.memory = parseInt(e.target.value);
     updateSliderFill(memorySlider);
+    updateMemoryDisplay(e.target.value);
     autoSaveConfig();
   });
 
-  const saveSettingsBtn = document.getElementById('saveSettingsBtn');
-  if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', async () => await saveSettings());
+  document.querySelectorAll('.memory-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const value = parseInt(btn.dataset.value);
+      if (memorySlider) memorySlider.value = value;
+      if (memoryInput) memoryInput.value = value;
+      currentConfig.memory = value;
+      updateSliderFill(memorySlider);
+      updateMemoryDisplay(value);
+      autoSaveConfig();
+    });
+  });
 
   const languageSelect = document.getElementById('languageSelect');
   if (languageSelect) languageSelect.addEventListener('change', (e) => {
@@ -671,6 +695,15 @@ async function updateUI() {
   }
   if (memorySlider) { memorySlider.value = currentConfig.memory; updateSliderFill(memorySlider); }
   if (memoryInput) memoryInput.value = currentConfig.memory;
+  const memoryValueDisplay = document.getElementById('memoryValueDisplay');
+  if (memoryValueDisplay) memoryValueDisplay.textContent = `${currentConfig.memory} MB`;
+  document.querySelectorAll('.memory-preset-btn').forEach(btn => {
+    if (parseInt(btn.dataset.value) === currentConfig.memory) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
   const profile = currentConfig.optimizationProfile || 'balanced';
   document.querySelectorAll('.optimization-btn').forEach(btn => {
     if (btn.getAttribute('data-profile') === profile) btn.classList.add('active');
@@ -1059,6 +1092,10 @@ async function initAccountsTab() {
   if (editAccountBtn) editAccountBtn.addEventListener('click', () => {
     if (skinFileInput) skinFileInput.click();
   });
+  const skinUploadBtn = document.getElementById('skinUploadBtn');
+  if (skinUploadBtn) skinUploadBtn.addEventListener('click', () => {
+    if (skinFileInput) skinFileInput.click();
+  });
   if (removeAccountBtn) removeAccountBtn.addEventListener('click', async () => {
     if (selectedAccountId) await removeAccount(selectedAccountId);
   });
@@ -1096,7 +1133,7 @@ async function displayAccounts() {
   const accountsList = document.getElementById('accountsList');
   if (!accountsList) return;
   if (allAccounts.length === 0) {
-    accountsList.innerHTML = `<div class="empty-state">${t('accounts_empty')}</div>`;
+    accountsList.innerHTML = `<div class="accounts-empty-state">${t('accounts_empty')}</div>`;
     return;
   }
   accountsList.innerHTML = '';
@@ -1607,9 +1644,11 @@ async function initModsTab() {
   const versionFilter = document.getElementById('modsVersionFilter');
   const loaderFilter = document.getElementById('modsLoaderFilter');
   const sortFilter = document.getElementById('modsSortFilter');
+  const categoryFilter = document.getElementById('modsCategoryFilter');
   const prevBtn = document.getElementById('modsPrevBtn');
   const nextBtn = document.getElementById('modsNextBtn');
   await loadModsVersionFilter();
+  await loadModsCategoryFilter();
   initContentTypeTabs();
   if (searchBtn) {
     searchBtn.addEventListener('click', () => {
@@ -1624,8 +1663,20 @@ async function initModsTab() {
         searchContentByType();
       }
     });
+    let searchTimeout;
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        currentModsPage = 0;
+        if (searchInput.value.trim()) {
+          searchContentByType();
+        } else {
+          loadContentByType();
+        }
+      }, 400);
+    });
   }
-  [versionFilter, loaderFilter, sortFilter].forEach(filter => {
+  [versionFilter, loaderFilter, sortFilter, categoryFilter].forEach(filter => {
     if (filter) {
       filter.addEventListener('change', () => {
         currentModsPage = 0;
@@ -1686,6 +1737,7 @@ function initContentTypeTabs() {
         searchInput.placeholder = placeholders[currentContentType] || t('mods_search_placeholder');
       }
       currentModsPage = 0;
+      loadModsCategoryFilter();
       loadContentByType();
     });
   });
@@ -1694,15 +1746,17 @@ function initContentTypeTabs() {
 async function loadContentByType() {
   const resultsContainer = document.getElementById('modsResults');
   if (!resultsContainer) return;
-  resultsContainer.innerHTML = `<div class="mod-loading">${t('common_loading')}</div>`;
+  resultsContainer.innerHTML = `<div class="mod-loading"><div class="skeleton-grid">${Array(6).fill('<div class="skeleton-card"><div class="skeleton-icon"></div><div class="skeleton-line short"></div><div class="skeleton-line"></div><div class="skeleton-line medium"></div></div>').join('')}</div></div>`;
   try {
     const versionFilter = document.getElementById('modsVersionFilter');
     const sortFilter = document.getElementById('modsSortFilter');
+    const categoryFilter = document.getElementById('modsCategoryFilter');
     const filters = {
       gameVersion: versionFilter?.value || '',
       sortBy: sortFilter?.value || 'downloads',
       limit: modsPerPage,
-      offset: currentModsPage * modsPerPage
+      offset: currentModsPage * modsPerPage,
+      category: categoryFilter?.value || ''
     };
     if (currentContentType === 'mod') {
       const loaderFilter = document.getElementById('modsLoaderFilter');
@@ -1735,11 +1789,13 @@ async function searchContentByType() {
     limit: modsPerPage,
     offset: currentModsPage * modsPerPage
   };
+  const categoryFilter = document.getElementById('modsCategoryFilter');
+  if (categoryFilter) currentModsFilters.category = categoryFilter.value || '';
   if (currentContentType === 'mod') {
     const loaderFilter = document.getElementById('modsLoaderFilter');
     currentModsFilters.loader = loaderFilter?.value || '';
   }
-  resultsContainer.innerHTML = `<div class="mod-loading">${t('common_loading')}</div>`;
+  resultsContainer.innerHTML = `<div class="mod-loading"><div class="skeleton-grid">${Array(6).fill('<div class="skeleton-card"><div class="skeleton-icon"></div><div class="skeleton-line short"></div><div class="skeleton-line"></div><div class="skeleton-line medium"></div></div>').join('')}</div></div>`;
   try {
     const result = await ipcRenderer.invoke('modrinth-search-content', query, currentContentType, currentModsFilters);
     if (result.success) {
@@ -1771,6 +1827,26 @@ async function loadModsVersionFilter() {
     }
   } catch (error) {
     console.error('Error loading versions for mods filter:', error);
+  }
+}
+
+async function loadModsCategoryFilter() {
+  const categoryFilter = document.getElementById('modsCategoryFilter');
+  if (!categoryFilter) return;
+  try {
+    const result = await ipcRenderer.invoke('modrinth-get-categories', currentContentType);
+    if (result.success && result.categories) {
+      categoryFilter.innerHTML = `<option value="">${t('mods_all_categories') || 'All Categories'}</option>`;
+      result.categories.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat.name;
+        const displayName = cat.translatedName || cat.name;
+        option.textContent = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+        categoryFilter.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error loading categories:', error);
   }
 }
 
@@ -2505,6 +2581,8 @@ async function initToolsTab() {
   const optimizeBtn = document.getElementById('optimizeBtn');
   const openLogsFolderBtn = document.getElementById('openLogsFolder');
   const analyzeLogsBtn = document.getElementById('analyzeLogs');
+  const runDiagnosticsBtn = document.getElementById('runDiagnosticsBtn');
+  const autoFixBtn = document.getElementById('autoFixBtn');
   if (checkIntegrityBtn) {
     checkIntegrityBtn.addEventListener('click', async () => {
       notify('integrity_check_start', {}, 'info');
@@ -2553,6 +2631,40 @@ async function initToolsTab() {
       await analyzeLogs();
     });
   }
+  if (runDiagnosticsBtn) {
+    runDiagnosticsBtn.addEventListener('click', async () => {
+      notify('diagnostics_start', {}, 'info');
+      const result = await ipcRenderer.invoke('run-diagnostics');
+      if (result.success) {
+        let message = `Java: ${result.javaFound ? 'Found (' + result.javaVersion + ')' : 'NOT FOUND'}\n`;
+        if (result.javaPath) message += `Path: ${result.javaPath}\n`;
+        if (result.heapSize) message += `Heap: ${result.heapSize}MB\n`;
+        message += `\nIssues: ${result.issues.length}`;
+        result.issues.forEach(issue => {
+          message += `\n  [${issue.type.toUpperCase()}] ${issue.message}`;
+          message += `\n    Fix: ${issue.fix}`;
+        });
+        showDetailedDialog(t('diagnostics_title') || 'Java Diagnostics', message, result.issues.length === 0 ? 'success' : 'warning');
+      } else {
+        notify('error_general', {error: result.error}, 'error');
+      }
+    });
+  }
+  if (autoFixBtn) {
+    autoFixBtn.addEventListener('click', async () => {
+      notify('diagnostics_fixing', {}, 'info');
+      const result = await ipcRenderer.invoke('auto-fix-java');
+      if (result.success) {
+        let message = `Fixes applied: ${result.fixes.length}\n`;
+        result.fixes.forEach(fix => {
+          message += `\n  [${fix.status}] ${fix.issue} → ${fix.fix}`;
+        });
+        showDetailedDialog(t('diagnostics_fix_title') || 'Auto Fix Results', message, result.fixes.length > 0 ? 'success' : 'info');
+      } else {
+        notify('error_general', {error: result.error}, 'error');
+      }
+    });
+  }
 }
 
 async function analyzeLogs() {
@@ -2565,17 +2677,98 @@ async function analyzeLogs() {
       viewer.innerHTML = `<div class="logs-placeholder">${t('logs_analyze_error')}</div>`;
       return;
     }
+    window._logData = result.logs || [];
+    window._logErrors = result.errors || [];
     viewer.innerHTML = '';
-    if (result.logs.length === 0) {
-      viewer.innerHTML = `<div class="logs-placeholder">Логи не найдены. Запустите игру хотя бы раз, чтобы появились логи.</div>`;
+    if (window._logData.length === 0) {
+      viewer.innerHTML = `<div class="logs-placeholder">${t('logs_not_found')}</div>`;
       return;
     }
-    result.logs.forEach(log => {
-      const line = document.createElement('div');
-      line.className = `log-line ${log.type}`;
-      line.textContent = `[${log.time}] ${log.message}`;
-      viewer.appendChild(line);
+    const toolbar = document.createElement('div');
+    toolbar.className = 'log-toolbar';
+    toolbar.innerHTML = `
+      <div class="log-toolbar-left">
+        <input type="text" id="logSearchInput" class="styled-input log-search" placeholder="${t('common_search') || 'Search logs...'}" style="width: 200px; padding: 6px 10px; font-size: 12px;">
+        <div class="log-filter-group">
+          <button class="log-filter-btn active" data-level="all">${t('logs_all') || 'All'}</button>
+          <button class="log-filter-btn" data-level="error" style="color: #ff6b6b;">ERROR</button>
+          <button class="log-filter-btn" data-level="warn" style="color: #ffc107;">WARN</button>
+          <button class="log-filter-btn" data-level="info" style="color: #4a9eff;">INFO</button>
+        </div>
+      </div>
+      <div class="log-toolbar-right">
+        <button class="log-export-btn" id="exportLogsBtn" title="${t('logs_export') || 'Export logs'}">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M7 0.5V8.5M7 8.5L4.5 6M7 8.5L9.5 6"/><rect x="1" y="10" width="12" height="2" rx="0.5"/></svg>
+          ${t('logs_export') || 'Export'}
+        </button>
+      </div>
+    `;
+    viewer.appendChild(toolbar);
+    const logContainer = document.createElement('div');
+    logContainer.className = 'log-container';
+    logContainer.id = 'logContainer';
+    viewer.appendChild(logContainer);
+    let currentFilter = 'all';
+    let currentSearch = '';
+    const renderLogs = () => {
+      logContainer.innerHTML = '';
+      const filtered = window._logData.filter(log => {
+        if (currentFilter !== 'all' && log.type !== currentFilter) return false;
+        if (currentSearch && !log.message.toLowerCase().includes(currentSearch.toLowerCase()) && !(`[${log.time}]`).toLowerCase().includes(currentSearch.toLowerCase())) return false;
+        return true;
+      });
+      if (filtered.length === 0) {
+        logContainer.innerHTML = `<div class="logs-placeholder">${t('logs_no_matching') || 'No matching log entries'}</div>`;
+        return;
+      }
+      const fragment = document.createDocumentFragment();
+      filtered.forEach(log => {
+        const line = document.createElement('div');
+        line.className = `log-line ${log.type}`;
+        line.textContent = `[${log.time}] ${log.message}`;
+        fragment.appendChild(line);
+      });
+      logContainer.appendChild(fragment);
+    };
+    renderLogs();
+    toolbar.querySelectorAll('.log-filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        toolbar.querySelectorAll('.log-filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.level;
+        renderLogs();
+      });
     });
+    const searchInput = toolbar.querySelector('#logSearchInput');
+    if (searchInput) {
+      let searchTimeout;
+      searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+          currentSearch = searchInput.value;
+          renderLogs();
+        }, 200);
+      });
+    }
+    const exportBtn = toolbar.querySelector('#exportLogsBtn');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', async () => {
+        const filtered = window._logData.filter(log => {
+          if (currentFilter !== 'all' && log.type !== currentFilter) return false;
+          if (currentSearch && !log.message.toLowerCase().includes(currentSearch.toLowerCase())) return false;
+          return true;
+        });
+        const text = filtered.map(log => `[${log.time}] [${log.type.toUpperCase()}] ${log.message}`).join('\n');
+        try {
+          const result = await ipcRenderer.invoke('export-logs', text);
+          if (result && result.success) {
+            notify('logs_export_success', {}, 'success');
+          }
+        } catch (e) {
+          console.error('Export error:', e);
+        }
+      });
+    }
     if (result.errors && result.errors.length > 0) {
       const summary = document.createElement('div');
       summary.style.cssText = 'margin-top: 16px; padding: 12px; background: rgba(255, 107, 107, 0.1); border-left: 3px solid #ff6b6b; border-radius: 4px;';
@@ -2617,8 +2810,8 @@ function showDetailedDialog(title, message, type = 'info') {
   dialog.querySelector('.modal-close-x').addEventListener('click', () => dialog.remove());
   dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.remove(); });
 }
-
-async function initFileManager() {  setTimeout(() => {
+async function initFileManager() {
+  setTimeout(() => {
     if (typeof initFileManagerNow === 'function') {
       initFileManagerNow();
     } else {
@@ -2626,3 +2819,84 @@ async function initFileManager() {  setTimeout(() => {
     }
   }, 500);
 }
+
+function initDragAndDrop() {
+  const modsTab = document.getElementById('modsTab');
+  const dropzone = document.getElementById('modsDropzone');
+  if (!modsTab || !dropzone) return;
+
+  let dragCounter = 0;
+
+  document.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    if (!e.dataTransfer.types.includes('Files')) return;
+    dragCounter++;
+    if (document.querySelector('[data-tab="mods"].active') || modsTab.classList.contains('active')) {
+      dropzone.style.display = 'flex';
+    }
+  });
+
+  document.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter === 0) {
+      dropzone.style.display = 'none';
+    }
+  });
+
+  document.addEventListener('dragover', (e) => {
+    e.preventDefault();
+  });
+
+  dropzone.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    dropzone.style.display = 'none';
+
+    const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.jar'));
+    if (files.length === 0) {
+      notify('mods_drop_no_jar', {}, 'error');
+      return;
+    }
+
+    const installedVersions = await ipcRenderer.invoke('get-versions-with-isolation');
+    if (!installedVersions || installedVersions.length === 0) {
+      notify('mod_no_versions', {}, 'error');
+      return;
+    }
+
+    const targetVersion = await showTargetVersionDialog(installedVersions, 'mod');
+    if (!targetVersion) return;
+
+    let modsDir;
+    const isolatedVersionsData = await ipcRenderer.invoke('get-isolation-settings');
+    const isolatedVersions = Array.isArray(isolatedVersionsData) ? isolatedVersionsData : [];
+    if (isolatedVersions.includes(targetVersion)) {
+      modsDir = path.join(require('os').homedir(), '.minecraft_custom', 'instances', targetVersion, 'mods');
+    } else {
+      modsDir = path.join(require('os').homedir(), '.minecraft_custom', 'mods');
+    }
+
+    let successCount = 0;
+    for (const file of files) {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const targetPath = path.join(modsDir, file.name);
+        await require('fs-extra').ensureDir(modsDir);
+        await require('fs-extra').writeFile(targetPath, buffer);
+        successCount++;
+      } catch (err) {
+        console.error('Error copying mod file:', err);
+      }
+    }
+
+    if (successCount > 0) {
+      notify('mods_drop_success', {count: successCount, version: targetVersion}, 'success');
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initDragAndDrop();
+});

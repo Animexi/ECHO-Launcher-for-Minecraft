@@ -243,71 +243,91 @@
 
       <div class="tab-content" id="accountsTab">
         <div class="accounts-section">
-          <h2 data-i18n="accounts_title">Управление аккаунтами</h2>
+          <div class="accounts-header">
+            <div class="accounts-header-left">
+              <h2 data-i18n="accounts_title">Управление аккаунтами</h2>
+              <p class="accounts-subtitle" data-i18n="accounts_subtitle">Настройте профили для входа в игру</p>
+            </div>
+            <button class="add-account-btn" id="addAccountBtn">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M9 3V15M3 9H15"/>
+              </svg>
+              <span data-i18n="accounts_add">Добавить аккаунт</span>
+            </button>
+          </div>
 
           <div class="accounts-container">
             <div class="accounts-list-container">
-              <div class="section-header">
-                <h3 data-i18n="accounts_your_accounts">Ваши аккаунты</h3>
-                <button class="add-account-btn" id="addAccountBtn">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M8 2V14M2 8H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                  </svg>
-                  <span data-i18n="accounts_add">Добавить</span>
-                </button>
-              </div>
-
               <div class="accounts-list" id="accountsList">
-                <div class="empty-state" data-i18n="accounts_empty">Нет добавленных аккаунтов</div>
+                <div class="accounts-empty-state" data-i18n="accounts_empty">Нет добавленных аккаунтов</div>
               </div>
             </div>
 
             <div class="account-details-container" id="accountDetailsContainer">
               <div class="account-details-empty">
-                <svg width="64" height="64" viewBox="0 0 64 64" fill="currentColor">
-                  <circle cx="32" cy="32" r="30" fill="#2a2a2a"/>
-                  <path d="M32 8C18.7 8 8 18.7 8 32C8 45.3 18.7 56 32 56C45.3 56 56 45.3 56 32C56 18.7 45.3 8 32 8ZM32 16C36.4 16 40 19.6 40 24C40 28.4 36.4 32 32 32C27.6 32 24 28.4 24 24C24 19.6 27.6 16 32 16ZM32 52C25.3 52 19.5 48.4 16 43C16 36.7 28.7 33 32 33C35.3 33 48 36.7 48 43C44.5 48.4 38.7 52 32 52Z" fill="#666"/>
-                </svg>
-                <p data-i18n="accounts_select">Выберите аккаунт или добавьте новый</p>
+                <div class="empty-avatar-ring">
+                  <div class="empty-avatar-inner">
+                    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                      <circle cx="24" cy="18" r="8" stroke="currentColor" stroke-width="2" opacity="0.4"/>
+                      <path d="M8 42C8 34 15.2 28 24 28C32.8 28 40 34 40 42" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+                    </svg>
+                  </div>
+                </div>
+                <p class="empty-title" data-i18n="accounts_select">Выберите аккаунт или добавьте новый</p>
+                <p class="empty-desc" data-i18n="accounts_empty_hint">Управляйте несколькими аккаунтами для быстрого переключения</p>
               </div>
 
               <div class="account-details hidden" id="accountDetails">
                 <div class="account-details-header">
-                  <div class="account-avatar-large" id="accountAvatarLarge">
-                    <svg width="96" height="96" viewBox="0 0 96 96" fill="currentColor">
-                      <rect width="96" height="96" fill="#2a2a2a"/>
-                    </svg>
+                  <div class="account-avatar-ring">
+                    <div class="account-avatar-large" id="accountAvatarLarge">
+                      <svg width="96" height="96" viewBox="0 0 96 96" fill="currentColor">
+                        <rect width="96" height="96" fill="#2a2a2a"/>
+                      </svg>
+                    </div>
+                    <div class="avatar-ring-glow"></div>
                   </div>
                   <div class="account-info-large">
                     <h3 id="accountNameLarge" data-i18n="account_username">Имя аккаунта</h3>
-                    <div class="account-type-badge" id="accountTypeBadge" data-i18n="accounts_local">Локальный</div>
-                    <div class="account-uuid" id="accountUuidDisplay">UUID: -</div>
+                    <div class="account-meta">
+                      <div class="account-type-badge" id="accountTypeBadge" data-i18n="accounts_local">Локальный</div>
+                      <div class="account-uuid" id="accountUuidDisplay">UUID: -</div>
+                    </div>
                   </div>
                 </div>
 
                 <div class="account-actions">
                   <button class="account-action-btn primary" id="selectAccountBtn">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M6 11L2 7L3.5 5.5L6 8L12.5 1.5L14 3L6 11Z"/>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M13.5 4.5L6 12L2.5 8.5"/>
                     </svg>
                     <span data-i18n="accounts_select_btn">Выбрать для игры</span>
                   </button>
                   <button class="account-action-btn" id="editAccountBtn">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M2 12V14H4L11.5 6.5L9.5 4.5L2 12ZM13.5 4.5L14.5 3.5C14.8 3.2 14.8 2.7 14.5 2.4L13.6 1.5C13.3 1.2 12.8 1.2 12.5 1.5L11.5 2.5L13.5 4.5Z"/>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M11.5 1.5L14.5 4.5L5 14H2V11L11.5 1.5Z"/>
                     </svg>
                     <span data-i18n="accounts_edit_skin">Изменить скин</span>
                   </button>
                   <button class="account-action-btn danger" id="removeAccountBtn">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M4 14C4 15.1 4.9 16 6 16H10C11.1 16 12 15.1 12 14V4H4V14ZM13 1H10.5L9.5 0H6.5L5.5 1H3V3H13V1Z"/>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M2 4H14M5 4V2H11V4M6 7V12M10 7V12M3 4L4 14H12L13 4"/>
                     </svg>
                     <span data-i18n="accounts_remove">Удалить</span>
                   </button>
                 </div>
 
                 <div class="skin-preview-section">
-                  <h4 data-i18n="account_skin_preview">Предпросмотр скина</h4>
+                  <div class="skin-preview-header">
+                    <h4 data-i18n="account_skin_preview">Предпросмотр скина</h4>
+                    <button class="skin-upload-btn" id="skinUploadBtn">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                        <path d="M7 10V2M3 5L7 1L11 5"/>
+                        <path d="M1 10V12C1 12.55 1.45 13 2 13H12C12.55 13 13 12.55 13 12V10"/>
+                      </svg>
+                      <span data-i18n="accounts_skin_upload">Загрузить</span>
+                    </button>
+                  </div>
                   <div class="skin-preview-large" id="skinPreviewLarge">
                     <div class="skin-placeholder" data-i18n="accounts_no_skin">Нет скина</div>
                   </div>
@@ -359,6 +379,12 @@
                   <option value="updated" data-i18n="mods_sort_updated_option">Обновлённые</option>
                 </select>
               </div>
+              <div class="filter-group">
+                <label data-i18n="mods_category_label">Категория:</label>
+                <select id="modsCategoryFilter" class="styled-select">
+                  <option value="" data-i18n="mods_all_categories">Все категории</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -374,6 +400,15 @@
 
           <div class="mods-results" id="modsResults">
             <div class="mod-loading" data-i18n="mods_loading_content">Загрузка популярного контента...</div>
+          </div>
+
+          <div class="mods-dropzone" id="modsDropzone" style="display: none;">
+            <div class="dropzone-content">
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="currentColor" opacity="0.5">
+                <path d="M24 4L30 16H42L32 24L36 38L24 30L12 38L16 24L6 16H18L24 4Z"/>
+              </svg>
+              <p data-i18n="mods_drop_files">Перетягніть .jar файли модів сюди</p>
+            </div>
           </div>
 
           <div class="mods-pagination" id="modsPagination" style="display: none;">
@@ -487,184 +522,230 @@
 
       <div class="tab-content" id="settingsTab">
         <div class="settings-section">
-          <h2 data-i18n="settings_title">Настройки лаунчера</h2>
-
-          <div class="setting-group">
-            <label>
-              <span data-i18n="settings_language">Язык интерфейса</span>
-              <span class="setting-description" data-i18n="settings_language_desc">Выберите язык лаунчера</span>
-            </label>
-            <select id="languageSelect" class="styled-select">
-              <option value="ru">RU — Русский</option>
-              <option value="en">EN — English</option>
-            </select>
-          </div>
-
-          <div class="setting-group">
-            <label>
-              <span data-i18n="settings_system_info">Информация о системе</span>
-              <span class="setting-description" data-i18n="settings_system_info_desc">Характеристики вашего ПК</span>
-            </label>
-            <div class="system-info" id="systemInfo">
-              <div class="system-info-loading" data-i18n="common_loading">Загрузка...</div>
+          <div class="settings-header">
+            <div class="settings-header-icon">
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="16" cy="16" r="5"/>
+                <path d="M16 3v4m0 18v4M5.27 5.27l2.83 2.83m15.8 15.8l2.83 2.83M3 16h4m18 0h4M5.27 26.73l2.83-2.83m15.8-15.8l2.83-2.83"/>
+              </svg>
+            </div>
+            <div>
+              <h2 data-i18n="settings_title">Настройки лаунчера</h2>
+              <p class="settings-subtitle" data-i18n="settings_subtitle">Персонализируйте ECHO под себя</p>
             </div>
           </div>
 
-          <div class="setting-group" style="display: none;">
-            <label>
-              <span data-i18n="settings_ely_account">Аккаунт Ely.by</span>
-              <span class="setting-description" data-i18n="settings_ely_desc">Войдите для автоматического получения скинов</span>
-            </label>
-            <div class="ely-auth-container" id="elyAuthContainer">
-              <div class="ely-not-logged-in" id="elyNotLoggedIn">
-                <div class="ely-by-info">
-                  <div class="info-card">
-                    <div class="info-icon">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-                      </svg>
-                    </div>
-                    <div class="info-content">
-                      <h3 data-i18n="settings_ely_benefits">Преимущества входа через Ely.by:</h3>
-                      <ol class="instruction-list">
-                        <li data-i18n="settings_ely_benefit1">Автоматическая загрузка вашего скина</li>
-                        <li data-i18n="settings_ely_benefit2">Не нужно вручную вводить ник</li>
-                        <li data-i18n="settings_ely_benefit3">Скины применяются мгновенно</li>
-                        <li data-i18n="settings_ely_benefit4">Поддержка HD скинов (64x64)</li>
-                      </ol>
-                      <div class="ely-note">
-                        <strong data-i18n="settings_ely_safe">Безопасно:</strong> <span data-i18n="settings_ely_safe_desc">Мы используем официальный OAuth протокол Ely.by</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <button class="ely-login-btn" id="elyLoginBtn">
+          <div class="settings-grid">
+            <!-- Основные настройки -->
+            <div class="settings-category" data-category="general">
+              <div class="category-header">
+                <div class="category-icon">
                   <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M10 2C5.6 2 2 5.6 2 10C2 14.4 5.6 18 10 18C14.4 18 18 14.4 18 10C18 5.6 14.4 2 10 2ZM10 5C11.1 5 12 5.9 12 7C12 8.1 11.1 9 10 9C8.9 9 8 8.1 8 7C8 5.9 8.9 5 10 5ZM10 16C8 16 6.3 14.8 5.5 13C5.5 11.3 8.7 10.3 10 10.3C11.3 10.3 14.5 11.3 14.5 13C13.7 14.8 12 16 10 16Z"/>
                   </svg>
-                  <span data-i18n="settings_ely_login_btn">Войти через Ely.by</span>
-                </button>
+                </div>
+                <h3 data-i18n="settings_general">Основные</h3>
               </div>
-              <div class="ely-logged-in hidden" id="elyLoggedIn">
-                <div class="ely-account-info">
-                  <div class="ely-account-avatar">
-                    <svg width="48" height="48" viewBox="0 0 48 48" fill="currentColor">
-                      <circle cx="24" cy="24" r="20" fill="#2a2a2a"/>
-                      <path d="M24 4C12.9 4 4 12.9 4 24C4 35.1 12.9 44 24 44C35.1 44 44 35.1 44 24C44 12.9 35.1 4 24 4ZM24 10C27.3 10 30 12.7 30 16C30 19.3 27.3 22 24 22C20.7 22 18 19.3 18 16C18 12.7 20.7 10 24 10ZM24 40C19 40 14.6 37.4 12 33.5C12 28.8 21.3 26.2 24 26.2C26.7 26.2 36 28.8 36 33.5C33.4 37.4 29 40 24 40Z" fill="#666"/>
-                    </svg>
-                  </div>
-                  <div class="ely-account-details">
-                    <div class="ely-account-username" id="elyAccountUsername" data-i18n="common_loading">Загрузка...</div>
-                    <div class="ely-account-email" id="elyAccountEmail">-</div>
-                    <div class="ely-account-status">
-                      <span class="ely-status-indicator"></span>
-                      <span class="ely-status-text" data-i18n="settings_ely_authorized">Авторизован</span>
+              
+              <div class="settings-cards">
+                <div class="setting-card">
+                  <div class="setting-card-header">
+                    <div class="setting-card-icon">
+                      <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
+                        <path d="M9 1C4.6 1 1 4.6 1 9C1 13.4 4.6 17 9 17C13.4 17 17 13.4 17 9C17 4.6 13.4 1 9 1ZM9 3C10.1 3 11 3.9 11 5C11 6.1 10.1 7 9 7C7.9 7 7 6.1 7 5C7 3.9 7.9 3 9 3ZM9 15C7 15 5.3 13.8 4.5 12C4.5 10.3 7.7 9.3 9 9.3C10.3 9.3 13.5 10.3 13.5 12C12.7 13.8 11 15 9 15Z"/>
+                      </svg>
+                    </div>
+                    <div class="setting-card-info">
+                      <span class="setting-card-title" data-i18n="settings_language">Язык интерфейса</span>
+                      <span class="setting-card-desc" data-i18n="settings_language_desc">Выберите язык лаунчера</span>
                     </div>
                   </div>
-                  <button class="ely-logout-btn" id="elyLogoutBtn" data-i18n="settings_ely_logout_btn">Выйти</button>
+                  <select id="languageSelect" class="styled-select">
+                    <option value="ru">RU — Русский</option>
+                    <option value="en">EN — English</option>
+                  </select>
+                </div>
+
+                <div class="setting-card">
+                  <div class="setting-card-header">
+                    <div class="setting-card-icon">
+                      <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
+                        <path d="M9 2L2 6V12C2 15.3 5 18.1 9 19C13 18.1 16 15.3 16 12V6L9 2ZM8 14L4 10L5.4 8.6L8 11.2L12.6 6.6L14 8L8 14Z"/>
+                      </svg>
+                    </div>
+                    <div class="setting-card-info">
+                      <span class="setting-card-title" data-i18n="settings_system_info">Информация о системе</span>
+                      <span class="setting-card-desc" data-i18n="settings_system_info_desc">Характеристики вашего ПК</span>
+                    </div>
+                  </div>
+                  <div class="system-info" id="systemInfo">
+                    <div class="system-info-loading" data-i18n="common_loading">Загрузка...</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Производительность -->
+            <div class="settings-category" data-category="performance">
+              <div class="category-header">
+                <div class="category-icon">
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 2L2 7V13C2 17.4 5.4 21.5 10 22.5C14.6 21.5 18 17.4 18 13V7L10 2ZM9 17L4 12L5.4 10.6L9 14.2L14.6 8.6L16 10L9 17Z"/>
+                  </svg>
+                </div>
+                <h3 data-i18n="settings_performance">Производительность</h3>
+              </div>
+              
+              <div class="settings-cards">
+                <div class="setting-card setting-card-wide">
+                  <div class="setting-card-header">
+                    <div class="setting-card-icon">
+                      <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
+                        <path d="M2 14V16H8V14H2ZM2 4V6H12V4H2ZM12 16V14H16V12H12V10H10V16H12ZM6 8V6H2V8H6V10H8V2H6V4H2V2H0V10H2V8H6ZM16 10V8H8V10H16ZM12 6H14V4H16V2H14V0H12V6Z"/>
+                      </svg>
+                    </div>
+                    <div class="setting-card-info">
+                      <span class="setting-card-title" data-i18n="settings_memory">Выделенная RAM</span>
+                      <span class="setting-card-desc" data-i18n="settings_memory_desc">Рекомендуется: 2048-4096 MB</span>
+                    </div>
+                    <div class="memory-value-display" id="memoryValueDisplay">2048 MB</div>
+                  </div>
+                  <div class="memory-slider-container">
+                    <input type="range" id="memorySlider" class="styled-slider" min="512" max="16384" step="256" value="2048">
+                    <input type="number" id="memoryInput" class="styled-input memory-input" min="512" max="16384" value="2048">
+                  </div>
+                  <div class="memory-presets">
+                    <button class="memory-preset-btn" data-value="2048">2 GB</button>
+                    <button class="memory-preset-btn" data-value="4096">4 GB</button>
+                    <button class="memory-preset-btn" data-value="6144">6 GB</button>
+                    <button class="memory-preset-btn" data-value="8192">8 GB</button>
+                  </div>
+                </div>
+
+                <div class="setting-card setting-card-wide">
+                  <div class="setting-card-header">
+                    <div class="setting-card-icon">
+                      <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
+                        <path d="M9 2L2 6V12C2 15.3 5 18.1 9 19C13 18.1 16 15.3 16 12V6L9 2ZM7 14L3 10L4.4 8.6L7 11.2L11.6 6.6L13 8L7 14Z"/>
+                      </svg>
+                    </div>
+                    <div class="setting-card-info">
+                      <span class="setting-card-title" data-i18n="settings_optimization">Профиль оптимизации</span>
+                      <span class="setting-card-desc" data-i18n="settings_optimization_desc">JVM аргументы для улучшения FPS</span>
+                    </div>
+                  </div>
+                  <div class="optimization-options">
+                    <button class="optimization-btn active" data-profile="balanced">
+                      <div class="optimization-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="12" cy="12" r="8"/>
+                        </svg>
+                      </div>
+                      <div class="optimization-content">
+                        <span class="optimization-name" data-i18n="settings_opt_balanced">Сбалансированный</span>
+                        <span class="optimization-desc" data-i18n="settings_opt_balanced_desc">Оптимальные настройки для большинства ПК</span>
+                      </div>
+                    </button>
+                    <button class="optimization-btn" data-profile="performance">
+                      <div class="optimization-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 2L14 8L20 9L15.5 12.5L17 19L12 16L7 19L8.5 12.5L4 9L10 8L12 2Z"/>
+                        </svg>
+                      </div>
+                      <div class="optimization-content">
+                        <span class="optimization-name" data-i18n="settings_opt_performance">Максимум FPS</span>
+                        <span class="optimization-desc" data-i18n="settings_opt_performance_desc">Агрессивная оптимизация GC, минимум лагов</span>
+                      </div>
+                    </button>
+                    <button class="optimization-btn" data-profile="potato">
+                      <div class="optimization-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                          <rect x="4" y="4" width="16" height="16" rx="2"/>
+                        </svg>
+                      </div>
+                      <div class="optimization-content">
+                        <span class="optimization-name" data-i18n="settings_opt_potato">Слабый ПК</span>
+                        <span class="optimization-desc" data-i18n="settings_opt_potato_desc">Консервативные настройки, меньше нагрузка</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Java и Видеокарта -->
+            <div class="settings-category" data-category="java">
+              <div class="category-header">
+                <div class="category-icon">
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M3 3H17V17H3V3ZM5 5V15H15V5H5ZM7 7H9V9H7V7ZM11 7H13V9H11V7ZM7 11H13V13H7V11Z"/>
+                  </svg>
+                </div>
+                <h3 data-i18n="settings_java_management">Java и Видеокарта</h3>
+              </div>
+              
+              <div class="settings-cards">
+                <div class="setting-card setting-card-wide">
+                  <div class="setting-card-header">
+                    <div class="setting-card-icon">
+                      <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
+                        <path d="M3 3H15V15H3V3ZM5 5V13H13V5H5ZM7 7H9V9H7V7ZM11 7H13V9H11V7ZM7 11H13V13H7V11Z"/>
+                      </svg>
+                    </div>
+                    <div class="setting-card-info">
+                      <span class="setting-card-title" data-i18n="settings_java_requirements">Требования Java</span>
+                      <span class="setting-card-desc" data-i18n="settings_java_requirements_desc">Версии Java для разных версий Minecraft</span>
+                    </div>
+                  </div>
+                  <div class="java-requirements-grid">
+                    <div class="java-req-item">
+                      <div class="java-req-version">Java 8</div>
+                      <div class="java-req-desc" data-i18n="settings_java_8_req">Minecraft 1.16 и старше</div>
+                    </div>
+                    <div class="java-req-item">
+                      <div class="java-req-version">Java 17</div>
+                      <div class="java-req-desc" data-i18n="settings_java_17_req">Minecraft 1.17 - 1.20.4</div>
+                    </div>
+                    <div class="java-req-item">
+                      <div class="java-req-version">Java 21</div>
+                      <div class="java-req-desc" data-i18n="settings_java_21_req">Minecraft 1.20.5 и новее</div>
+                    </div>
+                  </div>
+                  <div class="java-manager" id="javaManager">
+                    <div class="java-versions-list" id="javaVersionsList">
+                      <div class="system-info-loading" data-i18n="settings_java_loading">Загрузка информации о Java...</div>
+                    </div>
+                  </div>
+                  <div class="java-download-progress hidden" id="javaDownloadProgress">
+                    <div class="progress-info">
+                      <span id="javaProgressStage" data-i18n="java_downloading">Загрузка Java...</span>
+                      <span id="javaProgressPercent">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                      <div class="progress-fill" id="javaProgressFill"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="setting-card setting-card-wide">
+                  <div class="setting-card-header">
+                    <div class="setting-card-icon">
+                      <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
+                        <path d="M2 4C2 2.9 2.9 2 4 2H14C15.1 2 16 2.9 16 4V12C16 13.1 15.1 14 14 14H4C2.9 14 2 13.1 2 12V4ZM4 4V12H14V4H4ZM6 6H8V8H6V6ZM10 6H12V8H10V6ZM6 10H12V12H6V10Z"/>
+                      </svg>
+                    </div>
+                    <div class="setting-card-info">
+                      <span class="setting-card-title" data-i18n="settings_gpu_selection">Выбор видеокарты</span>
+                      <span class="setting-card-desc" data-i18n="settings_gpu_desc">Выберите GPU для запуска Minecraft</span>
+                    </div>
+                  </div>
+                  <div class="gpu-selection" id="gpuSelection">
+                    <div class="system-info-loading" data-i18n="settings_gpu_loading">Загрузка...</div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-
-          <div class="setting-group" style="display: none;">
-            <label for="usernameInput">
-              <span data-i18n="settings_username">Никнейм</span>
-              <span class="setting-description" data-i18n="settings_username_desc">Ваше имя в игре</span>
-            </label>
-            <input type="text" id="usernameInput" class="styled-input" placeholder="Введите никнейм" data-i18n="settings_username_placeholder" maxlength="16">
-          </div>
-
-          <div class="setting-group">
-            <label for="memoryInput">
-              <span data-i18n="settings_memory">Выделенная RAM (MB)</span>
-              <span class="setting-description" data-i18n="settings_memory_desc">Рекомендуется: 2048-4096 MB</span>
-            </label>
-            <div class="memory-slider-container">
-              <input type="range" id="memorySlider" class="styled-slider" min="512" max="16384" step="256" value="2048">
-              <input type="number" id="memoryInput" class="styled-input memory-input" min="512" max="16384" value="2048">
-            </div>
-          </div>
-
-          <div class="setting-group">
-            <label>
-              <span data-i18n="settings_optimization">Оптимизация производительности</span>
-              <span class="setting-description" data-i18n="settings_optimization_desc">JVM аргументы для улучшения FPS</span>
-            </label>
-            <div class="optimization-options">
-              <button class="optimization-btn active" data-profile="balanced">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <circle cx="8" cy="8" r="6"/>
-                </svg>
-                <span data-i18n="settings_opt_balanced">Сбалансированный</span>
-                <div class="optimization-desc" data-i18n="settings_opt_balanced_desc">Оптимальные настройки для большинства ПК</div>
-              </button>
-              <button class="optimization-btn" data-profile="performance">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M8 2L10 6L14 7L11 10L12 14L8 12L4 14L5 10L2 7L6 6L8 2Z"/>
-                </svg>
-                <span data-i18n="settings_opt_performance">Максимум FPS</span>
-                <div class="optimization-desc" data-i18n="settings_opt_performance_desc">Агрессивная оптимизация GC, минимум лагов</div>
-              </button>
-              <button class="optimization-btn" data-profile="potato">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M3 3H13V13H3V3Z"/>
-                </svg>
-                <span data-i18n="settings_opt_potato">Слабый ПК</span>
-                <div class="optimization-desc" data-i18n="settings_opt_potato_desc">Консервативные настройки, меньше нагрузка</div>
-              </button>
-            </div>
-          </div>
-
-          <div class="setting-group">
-            <label>
-              <span data-i18n="settings_java_management">Управление Java</span>
-              <span class="setting-description" data-i18n="settings_java_management_desc">Версии Java для разных версий Minecraft</span>
-            </label>
-            <div class="java-info-card">
-              <div class="info-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-                </svg>
-              </div>
-              <div class="info-content">
-                <h4 data-i18n="settings_java_requirements">Требования Java для Minecraft:</h4>
-                <ul class="java-requirements-list">
-                  <li data-i18n="settings_java_8_req"><strong>Java 8:</strong> Minecraft 1.16 и старше</li>
-                  <li data-i18n="settings_java_17_req"><strong>Java 17:</strong> Minecraft 1.17 - 1.20.4</li>
-                  <li data-i18n="settings_java_21_req"><strong>Java 21:</strong> Minecraft 1.20.5 и новее</li>
-                </ul>
-              </div>
-            </div>
-            <div class="java-manager" id="javaManager">
-              <div class="java-versions-list" id="javaVersionsList">
-                <div class="system-info-loading" data-i18n="settings_java_loading">Загрузка информации о Java...</div>
-              </div>
-            </div>
-            <div class="java-download-progress hidden" id="javaDownloadProgress">
-              <div class="progress-info">
-                <span id="javaProgressStage" data-i18n="java_downloading">Загрузка Java...</span>
-                <span id="javaProgressPercent">0%</span>
-              </div>
-              <div class="progress-bar">
-                <div class="progress-fill" id="javaProgressFill"></div>
-              </div>
-            </div>
-          </div>
-
-          <div class="setting-group">
-            <label>
-              <span data-i18n="settings_gpu_selection">Выбор видеокарты</span>
-              <span class="setting-description" data-i18n="settings_gpu_desc">Выберите GPU для запуска Minecraft</span>
-            </label>
-            <div class="gpu-selection" id="gpuSelection">
-              <div class="system-info-loading" data-i18n="settings_gpu_loading">Загрузка...</div>
-            </div>
-          </div>
-
-          <button class="save-button" id="saveSettingsBtn">
-            <span data-i18n="settings_save">Сохранить настройки</span>
-          </button>
 
           <div class="save-notification hidden" id="saveNotification">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -677,30 +758,147 @@
 
       <div class="tab-content" id="filesTab">
         <div class="file-manager">
-          <!-- Toolbar -->
           <div class="file-manager-toolbar">
             <div class="file-manager-navigation">
-              <button class="nav-btn" id="navBackBtn" disabled title="Назад" data-i18n-title="context_back">
+              <button class="nav-btn" id="navBackBtn" disabled title="Назад">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M10 2L4 8L10 14" stroke="currentColor" stroke-width="2" fill="none"/>
                 </svg>
               </button>
-              <button class="nav-btn" id="navForwardBtn" disabled title="Вперёд" data-i18n-title="context_forward">
+              <button class="nav-btn" id="navForwardBtn" disabled title="Вперёд">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M6 2L12 8L6 14" stroke="currentColor" stroke-width="2" fill="none"/>
                 </svg>
               </button>
-              <button class="nav-btn" id="navUpBtn" disabled title="На уровень выше" data-i18n-title="context_up">
+              <button class="nav-btn" id="navUpBtn" disabled title="На уровень выше">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 12V4M4 8L8 4L12 8" stroke="currentColor" stroke-width="2" fill="none"/>
                 </svg>
               </button>
-              <button class="nav-btn" id="navRefreshBtn" title="Обновить" data-i18n-title="context_refresh">
+              <button class="nav-btn" id="navRefreshBtn" title="Обновить">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M13.65 2.35C12.2 0.9 10.21 0 8 0C3.58 0 0 3.58 0 8H2C2 4.69 4.69 2 8 2C9.66 2 11.14 2.69 12.22 3.78L9 7H16V0L13.65 2.35Z"/>
                 </svg>
               </button>
             </div>
+            <div class="file-manager-breadcrumb" id="breadcrumb">
+              <span class="breadcrumb-item active">Minecraft</span>
+            </div>
+            <div class="file-manager-search">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+              </svg>
+              <input type="text" id="fileSearchInput" placeholder="Поиск...">
+            </div>
+            <div class="file-manager-actions">
+              <button class="action-btn" id="newFolderBtn" title="Создать папку">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M2 3C1.45 3 1 3.45 1 4V12C1 12.55 1.45 13 2 13H14C14.55 13 15 12.55 15 12V5C15 4.45 14.55 4 14 4H7L6 3H2Z"/>
+                  <path d="M8 6V10M6 8H10" stroke="white" stroke-width="1.5" fill="none"/>
+                </svg>
+              </button>
+              <button class="action-btn active" id="viewListBtn" title="Список">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M2 3H14V5H2V3ZM2 7H14V9H2V7ZM2 11H14V13H2V11Z"/>
+                </svg>
+              </button>
+              <button class="action-btn" id="viewGridBtn" title="Сетка">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M2 2H6V6H2V2ZM8 2H12V6H8V2ZM2 8H6V12H2V8ZM8 8H12V12H8V8Z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="file-manager-content">
+            <div class="file-manager-main">
+              <div class="file-list-header">
+                <div id="sortName" class="sorted">Имя <span class="sort-arrow">▲</span></div>
+                <div id="sortSize">Размер <span class="sort-arrow"></span></div>
+                <div id="sortDate">Изменён <span class="sort-arrow"></span></div>
+              </div>
+              <div class="file-list-content" id="fileListContent">
+                <div class="loading-spinner">Загрузка...</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="file-manager-statusbar" id="fileStatusBar">
+            <div class="status-left">
+              <span id="fileStatusText">Готов</span>
+              <span id="fileStatusSize"></span>
+            </div>
+            <span class="status-right" id="fileStatusSelection"></span>
+          </div>
+        </div>
+
+        <div class="file-context-menu hidden" id="fileContextMenu">
+          <div class="context-menu-item" data-action="open">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M9 2L14 7L9 12V9C4 9 1 11 0 14C1 10 3 6 9 6V2Z"/>
+            </svg>
+            <span>Открыть</span>
+            <span class="context-menu-shortcut">Enter</span>
+          </div>
+          <div class="context-menu-item" data-action="openExplorer">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2 3C1.45 3 1 3.45 1 4V12C1 12.55 1.45 13 2 13H14C14.55 13 15 12.55 15 12V5C15 4.45 14.55 4 14 4H7L6 3H2Z"/>
+            </svg>
+            <span>Показать в проводнике</span>
+          </div>
+          <div class="context-menu-item" data-action="edit">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M12.146 0.146a0.5 0.5 0 0 1 0.708 0l3 3a0.5 0.5 0 0 1 0 0.708l-10 10a0.5 0.5 0 0 1-0.168 0.11l-5 2a0.5 0.5 0 0 1-0.65-0.65l2-5a0.5 0.5 0 0 1 0.11-0.168l10-10zM11.207 2.5L13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a0.5 0.5 0 0 1 0.5 0.5v.5h.5a0.5 0.5 0 0 1 0.5 0.5v.5h.293l6.5-6.5z"/>
+            </svg>
+            <span>Просмотреть</span>
+            <span class="context-menu-shortcut">F4</span>
+          </div>
+          <div class="context-menu-separator"></div>
+          <div class="context-menu-item" data-action="cut">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3.5 2C2.67 2 2 2.67 2 3.5C2 4.33 2.67 5 3.5 5C4.33 5 5 4.33 5 3.5L8 6.5L11 3.5C11 4.33 11.67 5 12.5 5C13.33 5 14 4.33 14 3.5C14 2.67 13.33 2 12.5 2C11.67 2 11 2.67 11 3.5L8 6.5L5 3.5C5 2.67 4.33 2 3.5 2ZM3.5 10C2.67 10 2 10.67 2 11.5C2 12.33 2.67 13 3.5 13C4.33 13 5 12.33 5 11.5V7L3.5 8.5V10ZM12.5 10V8.5L11 7V11.5C11 12.33 11.67 13 12.5 13C13.33 13 14 12.33 14 11.5C14 10.67 13.33 10 12.5 10Z"/>
+            </svg>
+            <span>Вырезать</span>
+            <span class="context-menu-shortcut">Ctrl+X</span>
+          </div>
+          <div class="context-menu-item" data-action="copy">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M4 2C2.9 2 2 2.9 2 4V12H4V4H12V2H4ZM6 6C4.9 6 4 6.9 4 8V14C4 15.1 4.9 16 6 16H14C15.1 16 16 15.1 16 14V8C16 6.9 15.1 6 14 6H6Z"/>
+            </svg>
+            <span>Копировать</span>
+            <span class="context-menu-shortcut">Ctrl+C</span>
+          </div>
+          <div class="context-menu-item" data-action="paste" disabled>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M10 0H6C5.45 0 5 0.45 5 1H3C2.45 1 2 1.45 2 2V14C2 14.55 2.45 15 3 15H13C13.55 15 14 14.55 14 14V2C14 1.45 13.55 1 13 1H11C11 0.45 10.55 0 10 0Z"/>
+            </svg>
+            <span>Вставить</span>
+            <span class="context-menu-shortcut">Ctrl+V</span>
+          </div>
+          <div class="context-menu-separator"></div>
+          <div class="context-menu-item" data-action="rename">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2 12V14H4L11.5 6.5L9.5 4.5L2 12ZM13.5 4.5L14.5 3.5C14.8 3.2 14.8 2.7 14.5 2.4L13.6 1.5C13.3 1.2 12.8 1.2 12.5 1.5L11.5 2.5L13.5 4.5Z"/>
+            </svg>
+            <span>Переименовать</span>
+            <span class="context-menu-shortcut">F2</span>
+          </div>
+          <div class="context-menu-item danger" data-action="delete">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3 4V14C3 14.55 3.45 15 4 15H12C12.55 15 13 14.55 13 14V4H3ZM6 13H5V6H6V13ZM8.5 13H7.5V6H8.5V13ZM11 13H10V6H11V13ZM13 2H10L9 1H7L6 2H3V3H13V2Z"/>
+            </svg>
+            <span>Удалить</span>
+            <span class="context-menu-shortcut">Delete</span>
+          </div>
+          <div class="context-menu-separator"></div>
+          <div class="context-menu-item" data-action="properties">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M12 2H4C2.9 2 2 2.9 2 4V12C2 13.1 2.9 14 4 14H12C13.1 14 14 13.1 14 12V4C14 2.9 13.1 2 12 2ZM8 11C7.45 11 7 10.55 7 10C7 9.45 7.45 9 8 9C8.55 9 9 9.45 9 10C9 10.55 8.55 11 8 11ZM9 7H7V3H9V7Z"/>
+            </svg>
+            <span>Свойства</span>
+          </div>
+        </div>
+      </div>
             <div class="file-manager-breadcrumb" id="breadcrumb">
               <span class="breadcrumb-item active">Minecraft</span>
             </div>
@@ -825,8 +1023,8 @@
   <script src="../localization/translations.js"></script>
   <script src="dialog.js"></script>
   <script src="custom-dialogs.js"></script>
-  <script src="renderer.js"></script>
   <script src="file-manager.js"></script>
+  <script src="renderer.js"></script>
   <script src="background.js"></script>
 </body>
 </html>

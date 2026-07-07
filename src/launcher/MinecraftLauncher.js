@@ -3,6 +3,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const { spawn } = require('child_process');
 const os = require('os');
+const crypto = require('crypto');
 const extract = require('extract-zip');
 const JavaManager = require('./JavaManager');
 const GPUSettings = require('../utils/GPUSettings');
@@ -19,6 +20,9 @@ class MinecraftLauncher {
     this.authlibPath = path.join(this.minecraftDir, 'authlib-injector.jar');
     this.javaManager = new JavaManager();
     this.gpuSettings = new GPUSettings();
+    this.manifestCache = new Map();
+    this.MANIFEST_CACHE_TTL = 5 * 60 * 1000;
+    this.DOWNLOAD_CONCURRENCY = 8;
 
     this.initDirectories();
   }
@@ -65,6 +69,108 @@ class MinecraftLauncher {
     await fs.ensureDir(this.instancesDir);
   }
 
+  async getCachedManifest(url) {
+    const cached = this.manifestCache.get(url);
+    if (cached && (Date.now() - cached.timestamp < this.MANIFEST_CACHE_TTL)) {
+      return cached.data;
+    }
+    const response = await axios.get(url);
+    this.manifestCache.set(url, { data: response.data, timestamp: Date.now() });
+    return response.data;
+  }
+
+  async downloadWithResume(url, filePath, progressCallback) {
+    await fs.ensureDir(path.dirname(filePath));
+    let downloadedSize = 0;
+    try {
+      if (await fs.pathExists(filePath)) {
+        const stat = await fs.stat(filePath);
+        downloadedSize = stat.size;
+      }
+    } catch (e) {}
+
+    const headers = {};
+    if (downloadedSize > 0) {
+      headers['Range'] = `bytes=${downloadedSize}-`;
+    }
+
+    try {
+      const response = await axios({
+        method: 'get',
+        url: url,
+        responseType: 'stream',
+        headers: headers,
+        timeout: 60000
+      });
+
+      if (response.status === 206 && downloadedSize > 0) {
+        const writer = fs.createWriteStream(filePath, { flags: 'a' });
+        const totalLength = parseInt(response.headers['content-length'] || '0') + downloadedSize;
+        let currentSize = downloadedSize;
+
+        return new Promise((resolve, reject) => {
+          response.data.on('data', (chunk) => {
+            currentSize += chunk.length;
+            if (progressCallback && totalLength > 0) {
+              progressCallback({ loaded: currentSize, total: totalLength, percentage: Math.round((currentSize * 100) / totalLength) });
+            }
+          });
+          response.data.pipe(writer);
+          writer.on('finish', () => resolve({ success: true }));
+          writer.on('error', reject);
+        });
+      } else {
+        const writer = fs.createWriteStream(filePath);
+        const totalLength = parseInt(response.headers['content-length'] || '0');
+        let currentSize = 0;
+
+        return new Promise((resolve, reject) => {
+          response.data.on('data', (chunk) => {
+            currentSize += chunk.length;
+            if (progressCallback && totalLength > 0) {
+              progressCallback({ loaded: currentSize, total: totalLength, percentage: Math.round((currentSize * 100) / totalLength) });
+            }
+          });
+          response.data.pipe(writer);
+          writer.on('finish', () => resolve({ success: true }));
+          writer.on('error', reject);
+        });
+      }
+    } catch (error) {
+      if (error.response && error.response.status === 416) {
+        return { success: true };
+      }
+      throw error;
+    }
+  }
+
+  async verifyFileHash(filePath, expectedHash) {
+    if (!expectedHash) return true;
+    try {
+      if (!await fs.pathExists(filePath)) return false;
+      const fileBuffer = await fs.readFile(filePath);
+      const hash = crypto.createHash('sha1').update(fileBuffer).digest('hex');
+      return hash === expectedHash;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async downloadBatch(tasks, concurrency) {
+    let completed = 0;
+    const total = tasks.length;
+    const results = [];
+
+    for (let i = 0; i < tasks.length; i += concurrency) {
+      const batch = tasks.slice(i, i + concurrency);
+      const batchResults = await Promise.allSettled(batch.map(task => task()));
+      results.push(...batchResults);
+      completed += batch.length;
+    }
+
+    return results;
+  }
+
   async downloadAuthlibInjector() {
     if (await fs.pathExists(this.authlibPath)) return;
     try {
@@ -102,11 +208,9 @@ class MinecraftLauncher {
             }
             const libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
             if (!await fs.pathExists(libPath)) {
-              await fs.ensureDir(path.dirname(libPath));
               try {
                 const libUrl = `${library.url}${groupPath}/${artifact}/${version}/${jarName}`;
-                const libData = await axios.get(libUrl, { responseType: 'arraybuffer', timeout: 30000 });
-                await fs.writeFile(libPath, libData.data);
+                await this.downloadWithResume(libUrl, libPath);
               } catch (e) {
                 if (parts.length < 4) {
                   console.warn(`Failed to download Fabric lib ${library.name}:`, e.message);
@@ -122,6 +226,212 @@ class MinecraftLauncher {
       return fabricProfile;
     } catch (error) {
       console.error('Failed to download Fabric loader:', error);
+      return null;
+    }
+  }
+
+  async downloadForgeProfile(mcVersion, forgeVersion, versionId, progressCallback) {
+    try {
+      const profileUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${mcVersion}-${forgeVersion}/forge-${mcVersion}-${forgeVersion}-profile.json`;
+      progressCallback({ stage: bt('stage_fabric_profile'), progress: 35 });
+      const profileResponse = await axios.get(profileUrl, { timeout: 30000 });
+      const forgeProfile = profileResponse.data;
+
+      forgeProfile.id = versionId;
+      forgeProfile.inheritsFrom = mcVersion;
+      forgeProfile.type = 'release';
+
+      progressCallback({ stage: bt('stage_fabric_libs'), progress: 50 });
+      const libraries = forgeProfile.libraries || [];
+      const libTasks = [];
+      for (let i = 0; i < libraries.length; i++) {
+        const library = libraries[i];
+        let libPath = null;
+        let downloadUrl = null;
+
+        if (library.downloads && library.downloads.artifact) {
+          libPath = path.join(this.librariesDir, library.downloads.artifact.path);
+          downloadUrl = library.downloads.artifact.url;
+        } else if (library.name && library.url) {
+          const parts = library.name.split(':');
+          if (parts.length >= 3) {
+            const [group, artifact, version] = parts;
+            const groupPath = group.replace(/\./g, '/');
+            let jarName;
+            if (parts.length >= 4) {
+              jarName = `${artifact}-${version}-${parts[3]}.jar`;
+            } else {
+              jarName = `${artifact}-${version}.jar`;
+            }
+            libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
+            downloadUrl = `${library.url}${groupPath}/${artifact}/${version}/${jarName}`;
+          }
+        } else if (library.name) {
+          const parts = library.name.split(':');
+          if (parts.length >= 3) {
+            const [group, artifact, version] = parts;
+            const groupPath = group.replace(/\./g, '/');
+            const jarName = `${artifact}-${version}.jar`;
+            libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
+            downloadUrl = `https://maven.minecraftforge.net/${groupPath}/${artifact}/${version}/${jarName}`;
+          }
+        }
+
+        if (libPath && downloadUrl) {
+          const currentLibPath = libPath;
+          const currentDownloadUrl = downloadUrl;
+          libTasks.push(async () => {
+            if (await fs.pathExists(currentLibPath)) return { success: true, skipped: true };
+            try {
+              await this.downloadWithResume(currentDownloadUrl, currentLibPath);
+              return { success: true };
+            } catch (e) {
+              console.warn(`Failed to download Forge lib ${library.name}: ${e.message}`);
+              return { success: false };
+            }
+          });
+        }
+      }
+      if (libTasks.length > 0) {
+        let completed = 0;
+        for (let i = 0; i < libTasks.length; i += this.DOWNLOAD_CONCURRENCY) {
+          const batch = libTasks.slice(i, i + this.DOWNLOAD_CONCURRENCY);
+          await Promise.allSettled(batch.map(t => t()));
+          completed += batch.length;
+          progressCallback({ stage: bt('stage_fabric_libs_progress', {current: completed, total: libTasks.length}), progress: 50 + ((completed / libTasks.length) * 40) });
+        }
+      }
+      return forgeProfile;
+    } catch (error) {
+      console.error('Failed to download Forge profile:', error.message);
+      return null;
+    }
+  }
+
+  async downloadNeoForgeProfile(mcVersion, neoforgeVersion, versionId, progressCallback) {
+    try {
+      const profileUrl = `https://maven.neoforged.net/net/neoforged/neoforge/${neoforgeVersion}/neoforge-${neoforgeVersion}-profile.json`;
+      progressCallback({ stage: bt('stage_fabric_profile'), progress: 35 });
+      const profileResponse = await axios.get(profileUrl, { timeout: 30000 });
+      const neoforgeProfile = profileResponse.data;
+
+      neoforgeProfile.id = versionId;
+      neoforgeProfile.inheritsFrom = mcVersion;
+      neoforgeProfile.type = 'release';
+
+      progressCallback({ stage: bt('stage_fabric_libs'), progress: 50 });
+      const libraries = neoforgeProfile.libraries || [];
+      const libTasks = [];
+      for (let i = 0; i < libraries.length; i++) {
+        const library = libraries[i];
+        let libPath = null;
+        let downloadUrl = null;
+
+        if (library.downloads && library.downloads.artifact) {
+          libPath = path.join(this.librariesDir, library.downloads.artifact.path);
+          downloadUrl = library.downloads.artifact.url;
+        } else if (library.name && library.url) {
+          const parts = library.name.split(':');
+          if (parts.length >= 3) {
+            const [group, artifact, version] = parts;
+            const groupPath = group.replace(/\./g, '/');
+            let jarName;
+            if (parts.length >= 4) {
+              jarName = `${artifact}-${version}-${parts[3]}.jar`;
+            } else {
+              jarName = `${artifact}-${version}.jar`;
+            }
+            libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
+            downloadUrl = `${library.url}${groupPath}/${artifact}/${version}/${jarName}`;
+          }
+        } else if (library.name) {
+          const parts = library.name.split(':');
+          if (parts.length >= 3) {
+            const [group, artifact, version] = parts;
+            const groupPath = group.replace(/\./g, '/');
+            const jarName = `${artifact}-${version}.jar`;
+            libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
+            downloadUrl = `https://maven.neoforged.net/${groupPath}/${artifact}/${version}/${jarName}`;
+          }
+        }
+
+        if (libPath && downloadUrl) {
+          const currentLibPath = libPath;
+          const currentDownloadUrl = downloadUrl;
+          libTasks.push(async () => {
+            if (await fs.pathExists(currentLibPath)) return { success: true, skipped: true };
+            try {
+              await this.downloadWithResume(currentDownloadUrl, currentLibPath);
+              return { success: true };
+            } catch (e) {
+              console.warn(`Failed to download NeoForge lib ${library.name}: ${e.message}`);
+              return { success: false };
+            }
+          });
+        }
+      }
+      if (libTasks.length > 0) {
+        let completed = 0;
+        for (let i = 0; i < libTasks.length; i += this.DOWNLOAD_CONCURRENCY) {
+          const batch = libTasks.slice(i, i + this.DOWNLOAD_CONCURRENCY);
+          await Promise.allSettled(batch.map(t => t()));
+          completed += batch.length;
+          progressCallback({ stage: bt('stage_fabric_libs_progress', {current: completed, total: libTasks.length}), progress: 50 + ((completed / libTasks.length) * 40) });
+        }
+      }
+      return neoforgeProfile;
+    } catch (error) {
+      console.error('Failed to download NeoForge profile:', error.message);
+      return null;
+    }
+  }
+
+  async downloadQuiltLoader(mcVersion, loaderVersion, versionId, progressCallback) {
+    try {
+      const profileUrl = `https://meta.quiltmc.org/v3/versions/loader/${mcVersion}/${loaderVersion}/profile/json`;
+      progressCallback({ stage: bt('stage_fabric_profile'), progress: 35 });
+      const profileResponse = await axios.get(profileUrl, { timeout: 30000 });
+      const quiltProfile = profileResponse.data;
+
+      quiltProfile.id = versionId;
+      quiltProfile.isolated = true;
+      if (!quiltProfile.inheritsFrom) quiltProfile.inheritsFrom = mcVersion;
+
+      progressCallback({ stage: bt('stage_fabric_libs'), progress: 50 });
+      const libraries = quiltProfile.libraries || [];
+      for (let i = 0; i < libraries.length; i++) {
+        const library = libraries[i];
+        if (library.url && library.name) {
+          const parts = library.name.split(':');
+          if (parts.length >= 3) {
+            const [group, artifact, version] = parts;
+            const groupPath = group.replace(/\./g, '/');
+            let jarName;
+            if (parts.length >= 4) {
+              jarName = `${artifact}-${version}-${parts[3]}.jar`;
+            } else {
+              jarName = `${artifact}-${version}.jar`;
+            }
+            const libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
+            if (!await fs.pathExists(libPath)) {
+              try {
+                const libUrl = `${library.url}${groupPath}/${artifact}/${version}/${jarName}`;
+                await this.downloadWithResume(libUrl, libPath);
+              } catch (e) {
+                if (parts.length < 4) {
+                  console.warn(`Failed to download Quilt lib ${library.name}:`, e.message);
+                }
+              }
+            }
+          }
+        }
+        if (i % 5 === 0) {
+          progressCallback({ stage: bt('stage_fabric_libs_progress', {current: i, total: libraries.length}), progress: 50 + ((i / libraries.length) * 40) });
+        }
+      }
+      return quiltProfile;
+    } catch (error) {
+      console.error('Failed to download Quilt loader:', error.message);
       return null;
     }
   }
@@ -206,12 +516,17 @@ class MinecraftLauncher {
 
   async downloadMissingLibraries(versionJson) {
     const libraries = versionJson.libraries || [];
+    const tasks = [];
+
     for (const library of libraries) {
       let libPath = null;
       let downloadUrl = null;
+      let expectedHash = null;
+
       if (library.downloads && library.downloads.artifact) {
         libPath = path.join(this.librariesDir, library.downloads.artifact.path);
         downloadUrl = library.downloads.artifact.url;
+        expectedHash = library.downloads.artifact.sha1;
       } else if (library.name && library.url) {
         const parts = library.name.split(':');
         if (parts.length >= 3) {
@@ -238,20 +553,47 @@ class MinecraftLauncher {
           downloadUrl = library.downloads.classifiers[nativeKey].url;
         }
       }
-      if (libPath && downloadUrl && !await fs.pathExists(libPath)) {
-        await fs.ensureDir(path.dirname(libPath));
-        try {
-          const libData = await axios.get(downloadUrl, { responseType: 'arraybuffer', timeout: 30000 });
-          await fs.writeFile(libPath, libData.data);
-        } catch (e) {}
+
+      if (libPath && downloadUrl) {
+        const currentLibPath = libPath;
+        const currentDownloadUrl = downloadUrl;
+        const currentHash = expectedHash;
+        tasks.push(async () => {
+          const exists = await fs.pathExists(currentLibPath);
+          if (exists && currentHash) {
+            const valid = await this.verifyFileHash(currentLibPath, currentHash);
+            if (valid) return { success: true, skipped: true };
+            await fs.remove(currentLibPath);
+          }
+          if (!exists || !currentHash) {
+            if (await fs.pathExists(currentLibPath)) return { success: true, skipped: true };
+          }
+          try {
+            await this.downloadWithResume(currentDownloadUrl, currentLibPath);
+            if (currentHash) {
+              const valid = await this.verifyFileHash(currentLibPath, currentHash);
+              if (!valid) {
+                await fs.remove(currentLibPath);
+                await this.downloadWithResume(currentDownloadUrl, currentLibPath);
+              }
+            }
+            return { success: true };
+          } catch (e) {
+            return { success: false, error: e.message };
+          }
+        });
       }
+    }
+
+    if (tasks.length > 0) {
+      await this.downloadBatch(tasks, this.DOWNLOAD_CONCURRENCY);
     }
   }
 
   async getAvailableVersions() {
     try {
-      const response = await axios.get('https://launchermeta.mojang.com/mc/game/version_manifest.json');
-      return response.data.versions.filter(v => v.type === 'release');
+      const response = await this.getCachedManifest('https://launchermeta.mojang.com/mc/game/version_manifest.json');
+      return response.versions.filter(v => v.type === 'release');
     } catch (error) {
       console.error('Error fetching versions:', error);
       return [];
@@ -311,8 +653,9 @@ class MinecraftLauncher {
         await fs.ensureDir(path.join(instanceDir, 'config'));
 
         let moddedJson;
+
         if (isFabric && loaderVersion) {
-          progressCallback({ stage: bt('stage_downloading_fabric'), progress: 40 });
+          progressCallback({ stage: bt('stage_downloading_fabric'), progress: 30 });
           const fabricProfile = await this.downloadFabricLoader(mcVersion, loaderVersion, progressCallback);
           if (fabricProfile) {
             moddedJson = fabricProfile;
@@ -322,6 +665,43 @@ class MinecraftLauncher {
             if (!moddedJson.inheritsFrom) moddedJson.inheritsFrom = mcVersion;
           }
         }
+
+        if (isForge && loaderVersion) {
+          progressCallback({ stage: bt('stage_downloading_fabric'), progress: 30 });
+          const forgeProfile = await this.downloadForgeProfile(mcVersion, loaderVersion, versionId, progressCallback);
+          if (forgeProfile) {
+            moddedJson = forgeProfile;
+            moddedJson.id = versionId;
+            moddedJson.isolated = true;
+            moddedJson.instanceDir = instanceDir;
+            if (!moddedJson.inheritsFrom) moddedJson.inheritsFrom = mcVersion;
+          }
+        }
+
+        if (isNeoForge && loaderVersion) {
+          progressCallback({ stage: bt('stage_downloading_fabric'), progress: 30 });
+          const neoforgeProfile = await this.downloadNeoForgeProfile(mcVersion, loaderVersion, versionId, progressCallback);
+          if (neoforgeProfile) {
+            moddedJson = neoforgeProfile;
+            moddedJson.id = versionId;
+            moddedJson.isolated = true;
+            moddedJson.instanceDir = instanceDir;
+            if (!moddedJson.inheritsFrom) moddedJson.inheritsFrom = mcVersion;
+          }
+        }
+
+        if (isQuilt && loaderVersion) {
+          progressCallback({ stage: bt('stage_downloading_fabric'), progress: 30 });
+          const quiltProfile = await this.downloadQuiltLoader(mcVersion, loaderVersion, versionId, progressCallback);
+          if (quiltProfile) {
+            moddedJson = quiltProfile;
+            moddedJson.id = versionId;
+            moddedJson.isolated = true;
+            moddedJson.instanceDir = instanceDir;
+            if (!moddedJson.inheritsFrom) moddedJson.inheritsFrom = mcVersion;
+          }
+        }
+
         if (!moddedJson) {
           moddedJson = {
             ...vanillaJson,
@@ -333,13 +713,23 @@ class MinecraftLauncher {
             instanceDir: instanceDir
           };
         }
+
         await fs.writeJson(path.join(versionDir, `${versionId}.json`), moddedJson, { spaces: 2 });
+
+        progressCallback({ stage: bt('stage_downloading_libs'), progress: 70 });
+        try {
+          const resolvedJson = await this.resolveVersion(versionId);
+          await this.downloadMissingLibraries(resolvedJson);
+        } catch (e) {
+          console.warn('Failed to download mod loader libraries:', e.message);
+        }
+
         progressCallback({ stage: bt('stage_install_complete'), progress: 100 });
         return { success: true };
       }
 
-      const versionsManifest = await axios.get('https://launchermeta.mojang.com/mc/game/version_manifest.json');
-      const versionInfo = versionsManifest.data.versions.find(v => v.id === versionId);
+      const versionsManifest = await this.getCachedManifest('https://launchermeta.mojang.com/mc/game/version_manifest.json');
+      const versionInfo = versionsManifest.versions.find(v => v.id === versionId);
       if (!versionInfo) throw new Error('Version not found');
       const versionManifest = await axios.get(versionInfo.url);
       const versionData = versionManifest.data;
@@ -347,29 +737,62 @@ class MinecraftLauncher {
       await fs.ensureDir(versionDir);
       await fs.writeJson(path.join(versionDir, `${versionId}.json`), versionData, { spaces: 2 });
       progressCallback({ stage: bt('stage_downloading_client'), progress: 20 });
-      const clientJar = await axios.get(versionData.downloads.client.url, { responseType: 'arraybuffer', onDownloadProgress: (p) => {
-        const percent = Math.round((p.loaded * 100) / p.total);
-        progressCallback({ stage: bt('stage_downloading_client'), progress: 20 + percent * 0.2 });
-      } });
-      await fs.writeFile(path.join(versionDir, `${versionId}.jar`), clientJar.data);
+      const clientJarPath = path.join(versionDir, `${versionId}.jar`);
+      const clientHash = versionData.downloads.client.sha1;
+      const clientExists = await fs.pathExists(clientJarPath);
+      let clientValid = false;
+      if (clientExists && clientHash) {
+        clientValid = await this.verifyFileHash(clientJarPath, clientHash);
+      }
+      if (!clientValid) {
+        await this.downloadWithResume(versionData.downloads.client.url, clientJarPath, (p) => {
+          if (p.percentage) {
+            progressCallback({ stage: bt('stage_downloading_client'), progress: 20 + p.percentage * 0.2 });
+          }
+        });
+        if (clientHash) {
+          const valid = await this.verifyFileHash(clientJarPath, clientHash);
+          if (!valid) {
+            await fs.remove(clientJarPath);
+            await this.downloadWithResume(versionData.downloads.client.url, clientJarPath);
+          }
+        }
+      }
       progressCallback({ stage: bt('stage_downloading_libs'), progress: 40 });
       const libraries = versionData.libraries || [];
+      const libTasks = [];
       for (let i = 0; i < libraries.length; i++) {
         const library = libraries[i];
         if (library.downloads && library.downloads.artifact) {
           const artifact = library.downloads.artifact;
           const libPath = path.join(this.librariesDir, artifact.path);
-          if (!await fs.pathExists(libPath)) {
-            await fs.ensureDir(path.dirname(libPath));
+          const libUrl = artifact.url;
+          const libHash = artifact.sha1;
+          libTasks.push(async () => {
+            if (await fs.pathExists(libPath)) {
+              if (libHash) {
+                const valid = await this.verifyFileHash(libPath, libHash);
+                if (valid) return { success: true, skipped: true };
+                await fs.remove(libPath);
+              } else {
+                return { success: true, skipped: true };
+              }
+            }
             try {
-              const libData = await axios.get(artifact.url, { responseType: 'arraybuffer', timeout: 15000 });
-              await fs.writeFile(libPath, libData.data);
-            } catch (e) {}
-          }
+              await this.downloadWithResume(libUrl, libPath);
+              return { success: true };
+            } catch (e) {
+              return { success: false };
+            }
+          });
         }
-        if (i % 10 === 0) {
-          progressCallback({ stage: bt('stage_downloading_libs_progress', {current: i, total: libraries.length}), progress: 40 + ((i / libraries.length) * 20) });
-        }
+      }
+      let libCompleted = 0;
+      for (let i = 0; i < libTasks.length; i += this.DOWNLOAD_CONCURRENCY) {
+        const batch = libTasks.slice(i, i + this.DOWNLOAD_CONCURRENCY);
+        await Promise.allSettled(batch.map(t => t()));
+        libCompleted += batch.length;
+        progressCallback({ stage: bt('stage_downloading_libs_progress', {current: libCompleted, total: libTasks.length}), progress: 40 + ((libCompleted / libTasks.length) * 20) });
       }
       for (const library of libraries) {
         if (library.downloads && library.downloads.classifiers) {
@@ -378,10 +801,8 @@ class MinecraftLauncher {
           if (natives[nativeKey]) {
             const nativePath = path.join(this.librariesDir, natives[nativeKey].path);
             if (!await fs.pathExists(nativePath)) {
-              await fs.ensureDir(path.dirname(nativePath));
               try {
-                const nativeData = await axios.get(natives[nativeKey].url, { responseType: 'arraybuffer', timeout: 15000 });
-                await fs.writeFile(nativePath, nativeData.data);
+                await this.downloadWithResume(natives[nativeKey].url, nativePath);
               } catch (e) {}
             }
           }
@@ -405,12 +826,17 @@ class MinecraftLauncher {
           const hashPrefix = hash.substring(0, 2);
           const assetPath = path.join(this.assetsDir, 'objects', hashPrefix, hash);
           if (!await fs.pathExists(assetPath)) {
-            await fs.ensureDir(path.dirname(assetPath));
             try {
-              const assetUrl = `https://resources.download.minecraft.net/${hashPrefix}/${hash}`;
-              const assetData = await axios.get(assetUrl, { responseType: 'arraybuffer', timeout: 30000 });
-              await fs.writeFile(assetPath, assetData.data);
+              await this.downloadWithResume(`https://resources.download.minecraft.net/${hashPrefix}/${hash}`, assetPath);
             } catch (e) {}
+          } else if (hash) {
+            const valid = await this.verifyFileHash(assetPath, hash);
+            if (!valid) {
+              await fs.remove(assetPath);
+              try {
+                await this.downloadWithResume(`https://resources.download.minecraft.net/${hashPrefix}/${hash}`, assetPath);
+              } catch (e) {}
+            }
           }
           assetCount++;
           if (assetCount % 50 === 0 || assetCount === assetKeys.length) {
@@ -462,6 +888,243 @@ class MinecraftLauncher {
     }
   }
 
+  async scanModDependencies(modsDir, mcVersion, progressCallback) {
+    const AdmZip = require('adm-zip');
+    const results = { scanned: 0, missing: [], downloaded: [], errors: [] };
+
+    if (!await fs.pathExists(modsDir)) return results;
+
+    const files = await fs.readdir(modsDir);
+    const modJars = files.filter(f => f.endsWith('.jar'));
+    if (modJars.length === 0) return results;
+
+    const existingModIds = new Set();
+    const existingModSlugs = new Set();
+    const dependencyMap = new Map();
+
+    for (const jarFile of modJars) {
+      results.scanned++;
+      const jarPath = path.join(modsDir, jarFile);
+
+      try {
+        const zip = new AdmZip(jarPath);
+
+        // Try Fabric: fabric.mod.json
+        const fabricModEntry = zip.getEntry('fabric.mod.json');
+        if (fabricModEntry) {
+          try {
+            const fabricJson = JSON.parse(zip.readFileSync(fabricModEntry).toString('utf8'));
+            const modId = fabricJson.id;
+            if (modId) {
+              existingModIds.add(modId);
+              existingModSlugs.add(modId);
+            }
+            const deps = { ...fabricJson.depends, ...fabricJson.recommends };
+            for (const [depId, depInfo] of Object.entries(deps || {})) {
+              if (depId === 'minecraft' || depId === 'java' || depId === 'fabricloader' || depId === 'fabric-api' || depId === 'quilt_loader') continue;
+              if (!dependencyMap.has(depId)) {
+                dependencyMap.set(depId, { source: modId || jarFile, constraint: depInfo, loader: 'fabric' });
+              }
+            }
+          } catch (e) {}
+        }
+
+        // Try Forge: META-INF/mods.toml
+        const modsTomlEntry = zip.getEntry('META-INF/mods.toml');
+        if (modsTomlEntry) {
+          try {
+            const tomlContent = zip.readFileSync(modsTomlEntry).toString('utf8');
+            const modIdMatch = tomlContent.match(/modId\s*=\s*"?([^"\r\n]+)"?/);
+            if (modIdMatch) {
+              const modId = modIdMatch[1].trim();
+              existingModIds.add(modId);
+              existingModSlugs.add(modId);
+            }
+            const depMatches = tomlContent.match(/\[\[dependencies\.\w+\]\]\s*([\s\S]*?)(?=\[\[|\s*$)/g) || [];
+            for (const depBlock of depMatches) {
+              const depIdMatch = depBlock.match(/modId\s*=\s*"?([^"\r\n]+)"?/);
+              const mandatoryMatch = depBlock.match(/mandatory\s*=\s*(true|false)/);
+              if (depIdMatch) {
+                const depId = depIdMatch[1].trim();
+                if (depId === 'minecraft' || depId === 'java' || depId === 'forge' || depId === 'neoforge' || depId === 'fabricloader') continue;
+                const mandatory = mandatoryMatch ? mandatoryMatch[1] === 'true' : true;
+                if (!dependencyMap.has(depId)) {
+                  dependencyMap.set(depId, { source: modIdMatch ? modIdMatch[1].trim() : jarFile, mandatory, loader: 'forge' });
+                }
+              }
+            }
+          } catch (e) {}
+        }
+
+        // Try Forge legacy: mcmod.info
+        const mcmodEntry = zip.getEntry('mcmod.info');
+        if (mcmodEntry) {
+          try {
+            const mcmodJson = JSON.parse(zip.readFileSync(mcmodEntry).toString('utf8'));
+            const modInfo = Array.isArray(mcmodJson) ? mcmodJson[0] : mcmodJson;
+            if (modInfo && modInfo.modid) {
+              existingModIds.add(modInfo.modid);
+              existingModSlugs.add(modInfo.modid);
+            }
+            if (modInfo && modInfo.dependencies) {
+              for (const depId of modInfo.dependencies) {
+                if (depId === 'minecraft' || depId === 'forge') continue;
+                if (!dependencyMap.has(depId)) {
+                  dependencyMap.set(depId, { source: modInfo.modid || jarFile, loader: 'forge' });
+                }
+              }
+            }
+          } catch (e) {}
+        }
+
+        // Try NeoForge: META-INF/neoforge.mods.toml
+        const neoforgeTomlEntry = zip.getEntry('META-INF/neoforge.mods.toml');
+        if (neoforgeTomlEntry) {
+          try {
+            const tomlContent = zip.readFileSync(neoforgeTomlEntry).toString('utf8');
+            const modIdMatch = tomlContent.match(/modId\s*=\s*"?([^"\r\n]+)"?/);
+            if (modIdMatch) {
+              existingModIds.add(modIdMatch[1].trim());
+              existingModSlugs.add(modIdMatch[1].trim());
+            }
+            const depMatches = tomlContent.match(/\[\[dependencies\.\w+\]\]\s*([\s\S]*?)(?=\[\[|\s*$)/g) || [];
+            for (const depBlock of depMatches) {
+              const depIdMatch = depBlock.match(/modId\s*=\s*"?([^"\r\n]+)"?/);
+              if (depIdMatch) {
+                const depId = depIdMatch[1].trim();
+                if (depId === 'minecraft' || depId === 'java' || depId === 'neoforge' || depId === 'forge' || depId === 'fabricloader') continue;
+                if (!dependencyMap.has(depId)) {
+                  dependencyMap.set(depId, { source: modIdMatch ? modIdMatch[1].trim() : jarFile, loader: 'neoforge' });
+                }
+              }
+            }
+          } catch (e) {}
+        }
+
+        // Try Quilt: quilt.mod.json
+        const quiltModEntry = zip.getEntry('quilt.mod.json');
+        if (quiltModEntry) {
+          try {
+            const quiltJson = JSON.parse(zip.readFileSync(quiltModEntry).toString('utf8'));
+            const quiltDeps = quiltJson.quilt_loader?.metadata || {};
+            if (quiltDeps.id) {
+              existingModIds.add(quiltDeps.id);
+              existingModSlugs.add(quiltDeps.id);
+            }
+            const depends = quiltJson.quilt_loader?.depends || {};
+            for (const [depId, depInfo] of Object.entries(depends)) {
+              if (depId === 'minecraft' || depId === 'java' || depId === 'quilt_loader' || depId === 'fabricloader') continue;
+              if (!dependencyMap.has(depId)) {
+                dependencyMap.set(depId, { source: quiltDeps.id || jarFile, loader: 'quilt' });
+              }
+            }
+          } catch (e) {}
+        }
+
+      } catch (e) {}
+    }
+
+    const missingDeps = [];
+    for (const [depId, depInfo] of dependencyMap.entries()) {
+      if (!existingModIds.has(depId) && !existingModSlugs.has(depId)) {
+        missingDeps.push({ id: depId, ...depInfo });
+      }
+    }
+    results.missing = missingDeps;
+
+    if (missingDeps.length === 0) return results;
+
+    progressCallback({ stage: bt('stage_downloading_libs'), progress: 0, detail: `Found ${missingDeps.length} missing dependencies` });
+
+    const searchModrinth = async (depId, loader) => {
+      try {
+        const params = new URLSearchParams();
+        let facets = [['project_type:mod']];
+        if (mcVersion) {
+          const baseVersion = mcVersion.replace(/^(\d+\.\d+(?:\.\d+)?).*/, '$1');
+          facets.push([`versions:${baseVersion}`]);
+        }
+        if (loader) {
+          const loaderLower = loader.toLowerCase();
+          if (['fabric', 'forge', 'neoforge', 'quilt'].includes(loaderLower)) {
+            facets.push([`categories:${loaderLower}`]);
+          }
+        }
+        params.append('query', depId);
+        params.append('facets', JSON.stringify(facets));
+        params.append('limit', '5');
+
+        const response = await axios.get(`https://api.modrinth.com/v2/search?${params.toString()}`, {
+          headers: { 'User-Agent': 'ECHO-Launcher/1.0.0' },
+          timeout: 10000
+        });
+
+        const hits = response.data.hits || [];
+        const exactMatch = hits.find(h =>
+          h.slug === depId || h.title.toLowerCase() === depId.toLowerCase() ||
+          (h.slug && h.slug.replace(/-/g, '') === depId.replace(/[-_]/g, ''))
+        );
+        return exactMatch || hits[0] || null;
+      } catch (e) {
+        return null;
+      }
+    };
+
+    const downloadMod = async (dep) => {
+      try {
+        const project = await searchModrinth(dep.id, dep.loader);
+        if (!project) return null;
+
+        const versionParams = new URLSearchParams();
+        if (mcVersion) {
+          const baseVersion = mcVersion.replace(/^(\d+\.\d+(?:\.\d+)?).*/, '$1');
+          versionParams.append('game_versions', `["${baseVersion}"]`);
+        }
+        if (dep.loader) {
+          versionParams.append('loaders', `["${dep.loader.toLowerCase()}"]`);
+        }
+
+        const versionsResponse = await axios.get(
+          `https://api.modrinth.com/v2/project/${project.project_id}/version?${versionParams.toString()}`,
+          { headers: { 'User-Agent': 'ECHO-Launcher/1.0.0' }, timeout: 10000 }
+        );
+
+        const versions = versionsResponse.data || [];
+        if (versions.length === 0) return null;
+
+        const bestVersion = versions[0];
+        const file = bestVersion.files.find(f => f.file_type === 'release') || bestVersion.files[0];
+        if (!file) return null;
+
+        const fileName = file.filename || `${project.slug}-${bestVersion.version_number}.jar`;
+        const filePath = path.join(modsDir, fileName);
+
+        if (await fs.pathExists(filePath)) return null;
+
+        await this.downloadWithResume(file.url, filePath);
+        return { depId: dep.id, project: project.title, file: fileName };
+      } catch (e) {
+        return null;
+      }
+    };
+
+    const batchSize = 6;
+    let completed = 0;
+    for (let i = 0; i < missingDeps.length; i += batchSize) {
+      const batch = missingDeps.slice(i, i + batchSize);
+      const batchResults = await Promise.allSettled(batch.map(dep => downloadMod(dep)));
+      for (const r of batchResults) {
+        if (r.status === 'fulfilled' && r.value) {
+          results.downloaded.push(r.value);
+        }
+      }
+      completed += batch.length;
+      progressCallback({ stage: bt('stage_downloading_libs'), progress: Math.round((completed / missingDeps.length) * 100), detail: `Downloaded ${results.downloaded.length}/${missingDeps.length} dependencies` });
+    }
+
+    return results;
+  }
+
   async launchGame(config) {
     const { version, username, memory, isolated = false, optimizationProfile = 'balanced', selectedGPU = 0, elyAuth = null, preferredJava = null } = config;
 
@@ -496,6 +1159,28 @@ class MinecraftLauncher {
       await fs.ensureDir(path.join(instanceDir, 'mods'));
       await fs.ensureDir(path.join(instanceDir, 'config'));
       await fs.ensureDir(path.join(instanceDir, 'shaderpacks'));
+
+      const modsDir = path.join(instanceDir, 'mods');
+      const mcVersion = version.split('-')[0];
+      try {
+        const depResult = await this.scanModDependencies(modsDir, mcVersion, (p) => {
+          if (p.detail) console.log(`Dependency check: ${p.detail}`);
+        });
+        if (depResult.downloaded.length > 0) {
+          console.log(`Auto-downloaded ${depResult.downloaded.length} missing mod dependencies:`);
+          for (const d of depResult.downloaded) {
+            console.log(`  + ${d.project} (${d.file}) for dep "${d.depId}"`);
+          }
+        }
+        if (depResult.missing.length > 0 && depResult.downloaded.length < depResult.missing.length) {
+          const stillMissing = depResult.missing.filter(m => !depResult.downloaded.find(d => d.depId === m.id));
+          if (stillMissing.length > 0) {
+            console.warn(`Could not find on Modrinth: ${stillMissing.map(m => m.id).join(', ')}`);
+          }
+        }
+      } catch (e) {
+        console.warn('Mod dependency check failed (non-critical):', e.message);
+      }
     }
     const skinPath = path.join(this.minecraftDir, 'skin.png');
     if (await fs.pathExists(skinPath)) {
@@ -686,12 +1371,8 @@ class MinecraftLauncher {
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe']
     });
-    try {
-      const { execSync } = require('child_process');
-      execSync(`powershell -NoProfile -Command "(Get-Process -Id ${gameProcess.pid}).PriorityClass = 'High'"`, { stdio: 'ignore', timeout: 3000 });
-    } catch (e) { /* non-critical */ }
-    gameProcess.stdout.on('data', (data) => console.log(`[Minecraft] ${data}`));
-    gameProcess.stderr.on('data', (data) => console.error(`[Minecraft Error] ${data}`));
+    const { exec } = require('child_process');
+    exec(`powershell -NoProfile -Command "Get-Process -Id ${gameProcess.pid} -ErrorAction SilentlyContinue | ForEach-Object { $_.PriorityClass = 'High' }"`, { timeout: 5000 }, () => {});
     gameProcess.on('error', (error) => console.error('Failed to start game:', error));
     gameProcess.on('exit', (code) => {
       console.log(`Game exited with code ${code}`);
@@ -700,6 +1381,8 @@ class MinecraftLauncher {
       }, 5000);
     });
     gameProcess.unref();
+    gameProcess.stdout.on('data', () => {});
+    gameProcess.stderr.on('data', () => {});
     return { success: true, pid: gameProcess.pid, process: gameProcess };
   }
 
