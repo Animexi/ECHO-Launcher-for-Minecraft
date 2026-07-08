@@ -28,7 +28,6 @@ class MinecraftLauncher {
   }
 
   // ---------- Helper methods for library deduplication ----------
-  // FIX: Extract group:artifact from a library entry
   getLibraryGA(lib) {
     if (!lib.name) return null;
     const parts = lib.name.split(':');
@@ -41,14 +40,12 @@ class MinecraftLauncher {
     return null;
   }
 
-  // FIX: Get version string from a library entry
   getLibraryVersion(lib) {
     if (!lib.name) return '';
     const parts = lib.name.split(':');
     return parts.length >= 3 ? parts[2] : '';
   }
 
-  // FIX: Compare two version strings (simple numeric dot-separated)
   compareVersions(v1, v2) {
     const a = v1.split('.').map(Number);
     const b = v2.split('.').map(Number);
@@ -175,13 +172,13 @@ class MinecraftLauncher {
     if (await fs.pathExists(this.authlibPath)) return;
     try {
       console.log('Downloading authlib-injector...');
-      const response = await axios.get('https://authlib-injector.yushi.moe/artifact/latest.json');
+      const response = await axios.get('https://authlib-injector.yushi.moe/artifact/latest.json', { timeout: 15000 });
       const downloadUrl = response.data.download_url;
-      const fileResponse = await axios.get(downloadUrl, { responseType: 'arraybuffer' });
+      const fileResponse = await axios.get(downloadUrl, { responseType: 'arraybuffer', timeout: 30000 });
       await fs.writeFile(this.authlibPath, fileResponse.data);
       console.log('authlib-injector downloaded');
     } catch (error) {
-      console.error('Failed to download authlib-injector:', error);
+      console.error('Failed to download authlib-injector:', error.message);
     }
   }
 
@@ -231,209 +228,311 @@ class MinecraftLauncher {
   }
 
   async downloadForgeProfile(mcVersion, forgeVersion, versionId, progressCallback) {
-    try {
-      const profileUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${mcVersion}-${forgeVersion}/forge-${mcVersion}-${forgeVersion}-profile.json`;
-      progressCallback({ stage: bt('stage_fabric_profile'), progress: 35 });
-      const profileResponse = await axios.get(profileUrl, { timeout: 30000 });
-      const forgeProfile = profileResponse.data;
+    const maxRetries = 2;
+    let lastError = null;
 
-      forgeProfile.id = versionId;
-      forgeProfile.inheritsFrom = mcVersion;
-      forgeProfile.type = 'release';
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const installerUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${mcVersion}-${forgeVersion}/forge-${mcVersion}-${forgeVersion}-installer.jar`;
+        progressCallback({ stage: bt('stage_installing_forge'), progress: 35 });
 
-      progressCallback({ stage: bt('stage_fabric_libs'), progress: 50 });
-      const libraries = forgeProfile.libraries || [];
-      const libTasks = [];
-      for (let i = 0; i < libraries.length; i++) {
-        const library = libraries[i];
-        let libPath = null;
-        let downloadUrl = null;
+        const versionDir = path.join(this.versionsDir, versionId);
+        await fs.ensureDir(versionDir);
+        const installerPath = path.join(versionDir, `forge-installer.jar`);
 
-        if (library.downloads && library.downloads.artifact) {
-          libPath = path.join(this.librariesDir, library.downloads.artifact.path);
-          downloadUrl = library.downloads.artifact.url;
-        } else if (library.name && library.url) {
-          const parts = library.name.split(':');
-          if (parts.length >= 3) {
-            const [group, artifact, version] = parts;
-            const groupPath = group.replace(/\./g, '/');
-            let jarName;
-            if (parts.length >= 4) {
-              jarName = `${artifact}-${version}-${parts[3]}.jar`;
-            } else {
-              jarName = `${artifact}-${version}.jar`;
+        const response = await axios({ method: 'get', url: installerUrl, responseType: 'stream', timeout: 300000 });
+        const writer = fs.createWriteStream(installerPath);
+        await new Promise((resolve, reject) => {
+          response.data.pipe(writer);
+          writer.on('finish', resolve);
+          writer.on('error', reject);
+        });
+
+        const stat = await fs.stat(installerPath);
+        console.log(`Forge installer downloaded: ${(stat.size / 1024 / 1024).toFixed(1)}MB`);
+
+        progressCallback({ stage: bt('stage_installing_forge'), progress: 45 });
+
+        const javaPath = await this.javaManager.getJavaForMinecraft(mcVersion) || 'java';
+        await new Promise((resolve, reject) => {
+          const proc = spawn(javaPath, ['-jar', installerPath, '--installClient', this.minecraftDir], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            timeout: 600000
+          });
+          let stderr = '';
+          let libCount = 0;
+          let phase = 'libs';
+          proc.stdout.on('data', (d) => {
+            const text = d.toString();
+            console.log('[Forge Installer]', text.trim());
+            if (text.includes('Considering library')) {
+              libCount++;
+              if (libCount % 3 === 0) {
+                const libProgress = Math.min(70, 45 + (libCount / 80) * 25);
+                progressCallback({ stage: bt('stage_installing_forge_progress', { current: libCount, total: '~80' }), progress: Math.round(libProgress) });
+              }
             }
-            libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
-            downloadUrl = `${library.url}${groupPath}/${artifact}/${version}/${jarName}`;
-          }
-        } else if (library.name) {
-          const parts = library.name.split(':');
-          if (parts.length >= 3) {
-            const [group, artifact, version] = parts;
-            const groupPath = group.replace(/\./g, '/');
-            const jarName = `${artifact}-${version}.jar`;
-            libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
-            downloadUrl = `https://maven.minecraftforge.net/${groupPath}/${artifact}/${version}/${jarName}`;
-          }
-        }
-
-        if (libPath && downloadUrl) {
-          const currentLibPath = libPath;
-          const currentDownloadUrl = downloadUrl;
-          libTasks.push(async () => {
-            if (await fs.pathExists(currentLibPath)) return { success: true, skipped: true };
-            try {
-              await this.downloadWithResume(currentDownloadUrl, currentLibPath);
-              return { success: true };
-            } catch (e) {
-              console.warn(`Failed to download Forge lib ${library.name}: ${e.message}`);
-              return { success: false };
+            if (text.includes('Building Processors') || text.includes('MainClass:')) {
+              if (phase === 'libs') {
+                phase = 'processors';
+                progressCallback({ stage: bt('stage_installing_forge'), progress: 70 });
+              }
+            }
+            if (text.includes('Splitting') || text.includes('Extracting')) {
+              if (phase === 'processors') {
+                phase = 'done';
+                progressCallback({ stage: bt('stage_installing_forge'), progress: 80 });
+              }
             }
           });
+          proc.stderr.on('data', (d) => { stderr += d.toString(); });
+          proc.on('close', (code) => {
+            if (code === 0) {
+              console.log('Forge installer completed successfully');
+              resolve();
+            } else {
+              reject(new Error(`Forge installer exited with code ${code}: ${stderr.substring(0, 500)}`));
+            }
+          });
+          proc.on('error', reject);
+        });
+
+        try { await fs.remove(installerPath); } catch (e) {}
+
+        const installedJsonPath = path.join(versionDir, `${versionId}.json`);
+        if (await fs.pathExists(installedJsonPath)) {
+          const forgeProfile = await fs.readJson(installedJsonPath);
+          progressCallback({ stage: bt('stage_installing_forge'), progress: 90 });
+          return forgeProfile;
+        } else {
+          throw new Error('Forge installer did not create version.json');
+        }
+      } catch (error) {
+        lastError = error;
+        console.error(`Failed to download Forge profile (attempt ${attempt}/${maxRetries}):`, error.message);
+        try { await fs.remove(path.join(this.versionsDir, versionId, 'forge-installer.jar')); } catch (e) {}
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 2000));
         }
       }
-      if (libTasks.length > 0) {
-        let completed = 0;
-        for (let i = 0; i < libTasks.length; i += this.DOWNLOAD_CONCURRENCY) {
-          const batch = libTasks.slice(i, i + this.DOWNLOAD_CONCURRENCY);
-          await Promise.allSettled(batch.map(t => t()));
-          completed += batch.length;
-          progressCallback({ stage: bt('stage_fabric_libs_progress', {current: completed, total: libTasks.length}), progress: 50 + ((completed / libTasks.length) * 40) });
+    }
+    console.error('All Forge profile download attempts failed:', lastError?.message);
+    return null;
+  }
+
+  async downloadOptiFineProfile(mcVersion, optifineVersion, versionId, vanillaJson, progressCallback) {
+    try {
+      progressCallback({ stage: bt('stage_fabric_profile'), progress: 35 });
+
+      const jarFileName = `OptiFine_${mcVersion}_${optifineVersion}.jar`;
+      const optifineUrl = `https://optifine.net/adloadx?f=${jarFileName}`;
+      const libGroupPath = 'optifine/OptiFine';
+      const libVersion = `${mcVersion}_${optifineVersion}`;
+      const libPath = path.join(this.librariesDir, libGroupPath, 'OptiFine', libVersion, jarFileName);
+
+      progressCallback({ stage: bt('stage_downloading_client'), progress: 40 });
+      if (!await fs.pathExists(libPath)) {
+        try {
+          await fs.ensureDir(path.dirname(libPath));
+          const response = await axios.get(optifineUrl, {
+            responseType: 'stream',
+            timeout: 120000,
+            maxRedirects: 5,
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+          });
+          const writer = fs.createWriteStream(libPath);
+          await new Promise((resolve, reject) => {
+            response.data.pipe(writer);
+            writer.on('finish', resolve);
+            writer.on('error', reject);
+          });
+        } catch (e) {
+          console.error(`Failed to download OptiFine JAR from ${optifineUrl}:`, e.message);
+          return null;
         }
       }
-      return forgeProfile;
+
+      progressCallback({ stage: bt('stage_fabric_libs'), progress: 60 });
+
+      const optifineProfile = {
+        ...vanillaJson,
+        id: versionId,
+        type: 'release',
+        inheritsFrom: mcVersion,
+        mainClass: vanillaJson.mainClass || 'net.minecraft.client.main.Main',
+        libraries: [
+          ...(vanillaJson.libraries || []),
+          {
+            name: `optifine:OptiFine:${libVersion}`,
+            downloads: {
+              artifact: {
+                path: `${libGroupPath}/OptiFine/${libVersion}/${jarFileName}`,
+                url: optifineUrl
+              }
+            }
+          }
+        ]
+      };
+
+      progressCallback({ stage: bt('stage_fabric_libs'), progress: 80 });
+      return optifineProfile;
     } catch (error) {
-      console.error('Failed to download Forge profile:', error.message);
+      console.error('Failed to download OptiFine profile:', error.message);
       return null;
     }
   }
 
   async downloadNeoForgeProfile(mcVersion, neoforgeVersion, versionId, progressCallback) {
-    try {
-      const profileUrl = `https://maven.neoforged.net/net/neoforged/neoforge/${neoforgeVersion}/neoforge-${neoforgeVersion}-profile.json`;
-      progressCallback({ stage: bt('stage_fabric_profile'), progress: 35 });
-      const profileResponse = await axios.get(profileUrl, { timeout: 30000 });
-      const neoforgeProfile = profileResponse.data;
+    const maxRetries = 2;
+    let lastError = null;
 
-      neoforgeProfile.id = versionId;
-      neoforgeProfile.inheritsFrom = mcVersion;
-      neoforgeProfile.type = 'release';
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const installerUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${neoforgeVersion}/neoforge-${neoforgeVersion}-installer.jar`;
+        progressCallback({ stage: bt('stage_installing_neoforge'), progress: 35 });
 
-      progressCallback({ stage: bt('stage_fabric_libs'), progress: 50 });
-      const libraries = neoforgeProfile.libraries || [];
-      const libTasks = [];
-      for (let i = 0; i < libraries.length; i++) {
-        const library = libraries[i];
-        let libPath = null;
-        let downloadUrl = null;
+        const versionDir = path.join(this.versionsDir, versionId);
+        await fs.ensureDir(versionDir);
+        const installerPath = path.join(versionDir, `neoforge-installer.jar`);
 
-        if (library.downloads && library.downloads.artifact) {
-          libPath = path.join(this.librariesDir, library.downloads.artifact.path);
-          downloadUrl = library.downloads.artifact.url;
-        } else if (library.name && library.url) {
-          const parts = library.name.split(':');
-          if (parts.length >= 3) {
-            const [group, artifact, version] = parts;
-            const groupPath = group.replace(/\./g, '/');
-            let jarName;
-            if (parts.length >= 4) {
-              jarName = `${artifact}-${version}-${parts[3]}.jar`;
-            } else {
-              jarName = `${artifact}-${version}.jar`;
+        const response = await axios({ method: 'get', url: installerUrl, responseType: 'stream', timeout: 300000 });
+        const writer = fs.createWriteStream(installerPath);
+        await new Promise((resolve, reject) => {
+          response.data.pipe(writer);
+          writer.on('finish', resolve);
+          writer.on('error', reject);
+        });
+
+        const stat = await fs.stat(installerPath);
+        console.log(`NeoForge installer downloaded: ${(stat.size / 1024 / 1024).toFixed(1)}MB`);
+
+        progressCallback({ stage: bt('stage_installing_neoforge'), progress: 45 });
+
+        const javaPath = await this.javaManager.getJavaForMinecraft(mcVersion) || 'java';
+        await new Promise((resolve, reject) => {
+          const proc = spawn(javaPath, ['-jar', installerPath, '--installClient', this.minecraftDir], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            timeout: 600000
+          });
+          let stderr = '';
+          let libCount = 0;
+          let phase = 'libs';
+          proc.stdout.on('data', (d) => {
+            const text = d.toString();
+            console.log('[NeoForge Installer]', text.trim());
+            if (text.includes('Considering library')) {
+              libCount++;
+              if (libCount % 3 === 0) {
+                const libProgress = Math.min(70, 45 + (libCount / 80) * 25);
+                progressCallback({ stage: bt('stage_installing_neoforge_progress', { current: libCount, total: '~80' }), progress: Math.round(libProgress) });
+              }
             }
-            libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
-            downloadUrl = `${library.url}${groupPath}/${artifact}/${version}/${jarName}`;
-          }
-        } else if (library.name) {
-          const parts = library.name.split(':');
-          if (parts.length >= 3) {
-            const [group, artifact, version] = parts;
-            const groupPath = group.replace(/\./g, '/');
-            const jarName = `${artifact}-${version}.jar`;
-            libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
-            downloadUrl = `https://maven.neoforged.net/${groupPath}/${artifact}/${version}/${jarName}`;
-          }
-        }
-
-        if (libPath && downloadUrl) {
-          const currentLibPath = libPath;
-          const currentDownloadUrl = downloadUrl;
-          libTasks.push(async () => {
-            if (await fs.pathExists(currentLibPath)) return { success: true, skipped: true };
-            try {
-              await this.downloadWithResume(currentDownloadUrl, currentLibPath);
-              return { success: true };
-            } catch (e) {
-              console.warn(`Failed to download NeoForge lib ${library.name}: ${e.message}`);
-              return { success: false };
+            if (text.includes('Building Processors') || text.includes('MainClass:')) {
+              if (phase === 'libs') {
+                phase = 'processors';
+                progressCallback({ stage: bt('stage_installing_neoforge'), progress: 70 });
+              }
+            }
+            if (text.includes('Splitting') || text.includes('Extracting')) {
+              if (phase === 'processors') {
+                phase = 'done';
+                progressCallback({ stage: bt('stage_installing_neoforge'), progress: 80 });
+              }
             }
           });
+          proc.stderr.on('data', (d) => { stderr += d.toString(); });
+          proc.on('close', (code) => {
+            if (code === 0) {
+              console.log('NeoForge installer completed successfully');
+              resolve();
+            } else {
+              reject(new Error(`NeoForge installer exited with code ${code}: ${stderr.substring(0, 500)}`));
+            }
+          });
+          proc.on('error', reject);
+        });
+
+        try { await fs.remove(installerPath); } catch (e) {}
+
+        const installedJsonPath = path.join(versionDir, `${versionId}.json`);
+        if (await fs.pathExists(installedJsonPath)) {
+          const neoforgeProfile = await fs.readJson(installedJsonPath);
+          progressCallback({ stage: bt('stage_installing_neoforge'), progress: 90 });
+          return neoforgeProfile;
+        } else {
+          throw new Error('NeoForge installer did not create version.json');
+        }
+      } catch (error) {
+        lastError = error;
+        console.error(`Failed to download NeoForge profile (attempt ${attempt}/${maxRetries}):`, error.message);
+        try { await fs.remove(path.join(this.versionsDir, versionId, 'neoforge-installer.jar')); } catch (e) {}
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 2000));
         }
       }
-      if (libTasks.length > 0) {
-        let completed = 0;
-        for (let i = 0; i < libTasks.length; i += this.DOWNLOAD_CONCURRENCY) {
-          const batch = libTasks.slice(i, i + this.DOWNLOAD_CONCURRENCY);
-          await Promise.allSettled(batch.map(t => t()));
-          completed += batch.length;
-          progressCallback({ stage: bt('stage_fabric_libs_progress', {current: completed, total: libTasks.length}), progress: 50 + ((completed / libTasks.length) * 40) });
-        }
-      }
-      return neoforgeProfile;
-    } catch (error) {
-      console.error('Failed to download NeoForge profile:', error.message);
-      return null;
     }
+    console.error('All NeoForge profile download attempts failed:', lastError?.message);
+    return null;
   }
 
   async downloadQuiltLoader(mcVersion, loaderVersion, versionId, progressCallback) {
-    try {
-      const profileUrl = `https://meta.quiltmc.org/v3/versions/loader/${mcVersion}/${loaderVersion}/profile/json`;
-      progressCallback({ stage: bt('stage_fabric_profile'), progress: 35 });
-      const profileResponse = await axios.get(profileUrl, { timeout: 30000 });
-      const quiltProfile = profileResponse.data;
+    const maxRetries = 2;
+    let lastError = null;
 
-      quiltProfile.id = versionId;
-      quiltProfile.isolated = true;
-      if (!quiltProfile.inheritsFrom) quiltProfile.inheritsFrom = mcVersion;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const profileUrl = `https://meta.quiltmc.org/v3/versions/loader/${mcVersion}/${loaderVersion}/profile/json`;
+        progressCallback({ stage: bt('stage_installing_quilt'), progress: 35 });
+        const profileResponse = await axios.get(profileUrl, { timeout: 30000 });
+        const quiltProfile = profileResponse.data;
 
-      progressCallback({ stage: bt('stage_fabric_libs'), progress: 50 });
-      const libraries = quiltProfile.libraries || [];
-      for (let i = 0; i < libraries.length; i++) {
-        const library = libraries[i];
-        if (library.url && library.name) {
-          const parts = library.name.split(':');
-          if (parts.length >= 3) {
-            const [group, artifact, version] = parts;
-            const groupPath = group.replace(/\./g, '/');
-            let jarName;
-            if (parts.length >= 4) {
-              jarName = `${artifact}-${version}-${parts[3]}.jar`;
-            } else {
-              jarName = `${artifact}-${version}.jar`;
-            }
-            const libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
-            if (!await fs.pathExists(libPath)) {
-              try {
-                const libUrl = `${library.url}${groupPath}/${artifact}/${version}/${jarName}`;
-                await this.downloadWithResume(libUrl, libPath);
-              } catch (e) {
-                if (parts.length < 4) {
-                  console.warn(`Failed to download Quilt lib ${library.name}:`, e.message);
+        quiltProfile.id = versionId;
+        quiltProfile.isolated = true;
+        if (!quiltProfile.inheritsFrom) quiltProfile.inheritsFrom = mcVersion;
+
+        progressCallback({ stage: bt('stage_installing_quilt'), progress: 50 });
+        const libraries = quiltProfile.libraries || [];
+        for (let i = 0; i < libraries.length; i++) {
+          const library = libraries[i];
+          if (library.url && library.name) {
+            const parts = library.name.split(':');
+            if (parts.length >= 3) {
+              const [group, artifact, version] = parts;
+              const groupPath = group.replace(/\./g, '/');
+              let jarName;
+              if (parts.length >= 4) {
+                jarName = `${artifact}-${version}-${parts[3]}.jar`;
+              } else {
+                jarName = `${artifact}-${version}.jar`;
+              }
+              const libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
+              if (!await fs.pathExists(libPath)) {
+                try {
+                  const libUrl = `${library.url}${groupPath}/${artifact}/${version}/${jarName}`;
+                  await this.downloadWithResume(libUrl, libPath);
+                } catch (e) {
+                  if (parts.length < 4) {
+                    console.warn(`Failed to download Quilt lib ${library.name}:`, e.message);
+                  }
                 }
               }
             }
           }
+          if (i % 5 === 0) {
+            progressCallback({ stage: bt('stage_installing_quilt_progress', {current: i, total: libraries.length}), progress: 50 + ((i / libraries.length) * 40) });
+          }
         }
-        if (i % 5 === 0) {
-          progressCallback({ stage: bt('stage_fabric_libs_progress', {current: i, total: libraries.length}), progress: 50 + ((i / libraries.length) * 40) });
+        return quiltProfile;
+      } catch (error) {
+        lastError = error;
+        console.error(`Failed to download Quilt loader (attempt ${attempt}/${maxRetries}):`, error.message);
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 2000));
         }
       }
-      return quiltProfile;
-    } catch (error) {
-      console.error('Failed to download Quilt loader:', error.message);
-      return null;
     }
+    console.error('All Quilt loader download attempts failed:', lastError?.message);
+    return null;
   }
 
   getLibraryKey(lib) {
@@ -442,14 +541,12 @@ class MinecraftLauncher {
     return JSON.stringify(lib);
   }
 
-  // FIX: Completely rewritten mergeVersion to deduplicate libraries by group:artifact (keep newest)
   async mergeVersion(json) {
     let result = { ...json };
     let current = json;
     const processedParents = new Set();
-    const allLibraries = []; // will hold all libraries from all levels
+    const allLibraries = [];
 
-    // Helper to add libraries from a version object
     const addLibraries = (versionObj) => {
       if (versionObj.libraries) {
         for (const lib of versionObj.libraries) {
@@ -468,24 +565,54 @@ class MinecraftLauncher {
       const parentJson = await fs.readJson(parentJsonPath);
       addLibraries(parentJson);
 
-      // Merge other fields (mainClass, assetIndex, etc.) as before
       if (!result.mainClass && parentJson.mainClass) result.mainClass = parentJson.mainClass;
       if (!result.assetIndex && parentJson.assetIndex) result.assetIndex = parentJson.assetIndex;
       if (!result.assets && parentJson.assets) result.assets = parentJson.assets;
       if (!result.javaVersion && parentJson.javaVersion) result.javaVersion = parentJson.javaVersion;
-      if (!result.arguments && parentJson.arguments) result.arguments = parentJson.arguments;
+      if (parentJson.arguments) {
+        if (!result.arguments) {
+          result.arguments = JSON.parse(JSON.stringify(parentJson.arguments));
+        } else {
+          if (parentJson.arguments.jvm) {
+            if (!result.arguments.jvm) {
+              result.arguments.jvm = JSON.parse(JSON.stringify(parentJson.arguments.jvm));
+            } else {
+              const existingJvm = new Set(result.arguments.jvm.filter(a => typeof a === 'string'));
+              for (const jvmArg of parentJson.arguments.jvm) {
+                if (typeof jvmArg === 'string' && !existingJvm.has(jvmArg)) {
+                  result.arguments.jvm.push(jvmArg);
+                } else if (typeof jvmArg === 'object') {
+                  result.arguments.jvm.push(jvmArg);
+                }
+              }
+            }
+          }
+          if (parentJson.arguments.game) {
+            if (!result.arguments.game) {
+              result.arguments.game = JSON.parse(JSON.stringify(parentJson.arguments.game));
+            } else {
+              const existingGame = new Set(result.arguments.game.filter(a => typeof a === 'string'));
+              for (const gameArg of parentJson.arguments.game) {
+                if (typeof gameArg === 'string' && !existingGame.has(gameArg)) {
+                  result.arguments.game.push(gameArg);
+                } else if (typeof gameArg === 'object') {
+                  result.arguments.game.push(gameArg);
+                }
+              }
+            }
+          }
+        }
+      }
       if (!result.minecraftArguments && parentJson.minecraftArguments) result.minecraftArguments = parentJson.minecraftArguments;
       if (!result.type && parentJson.type) result.type = parentJson.type;
 
       current = parentJson;
     }
 
-    // Deduplicate allLibraries by group:artifact, keep highest version
     const dedupMap = new Map();
     for (const lib of allLibraries) {
       const ga = this.getLibraryGA(lib);
       if (!ga) {
-        // If no group:artifact, keep as-is (fallback)
         dedupMap.set(JSON.stringify(lib), lib);
         continue;
       }
@@ -496,7 +623,7 @@ class MinecraftLauncher {
         const existingVer = this.getLibraryVersion(existing);
         const newVer = this.getLibraryVersion(lib);
         if (this.compareVersions(newVer, existingVer) > 0) {
-          dedupMap.set(ga, lib); // keep newer
+          dedupMap.set(ga, lib);
         }
       }
     }
@@ -667,7 +794,7 @@ class MinecraftLauncher {
         }
 
         if (isForge && loaderVersion) {
-          progressCallback({ stage: bt('stage_downloading_fabric'), progress: 30 });
+          progressCallback({ stage: bt('stage_installing_forge'), progress: 30 });
           const forgeProfile = await this.downloadForgeProfile(mcVersion, loaderVersion, versionId, progressCallback);
           if (forgeProfile) {
             moddedJson = forgeProfile;
@@ -679,7 +806,7 @@ class MinecraftLauncher {
         }
 
         if (isNeoForge && loaderVersion) {
-          progressCallback({ stage: bt('stage_downloading_fabric'), progress: 30 });
+          progressCallback({ stage: bt('stage_installing_neoforge'), progress: 30 });
           const neoforgeProfile = await this.downloadNeoForgeProfile(mcVersion, loaderVersion, versionId, progressCallback);
           if (neoforgeProfile) {
             moddedJson = neoforgeProfile;
@@ -691,7 +818,7 @@ class MinecraftLauncher {
         }
 
         if (isQuilt && loaderVersion) {
-          progressCallback({ stage: bt('stage_downloading_fabric'), progress: 30 });
+          progressCallback({ stage: bt('stage_installing_quilt'), progress: 30 });
           const quiltProfile = await this.downloadQuiltLoader(mcVersion, loaderVersion, versionId, progressCallback);
           if (quiltProfile) {
             moddedJson = quiltProfile;
@@ -702,16 +829,22 @@ class MinecraftLauncher {
           }
         }
 
+        if (isOptiFine && loaderVersion) {
+          progressCallback({ stage: bt('stage_downloading_fabric'), progress: 30 });
+          const optifineProfile = await this.downloadOptiFineProfile(mcVersion, loaderVersion, versionId, vanillaJson, progressCallback);
+          if (optifineProfile) {
+            moddedJson = optifineProfile;
+            moddedJson.id = versionId;
+            moddedJson.isolated = true;
+            moddedJson.instanceDir = instanceDir;
+            if (!moddedJson.inheritsFrom) moddedJson.inheritsFrom = mcVersion;
+          }
+        }
+
         if (!moddedJson) {
-          moddedJson = {
-            ...vanillaJson,
-            id: versionId,
-            type: isForge ? 'forge' : isFabric ? 'fabric' : isOptiFine ? 'optifine' : isNeoForge ? 'neoforge' : 'quilt',
-            inheritsFrom: mcVersion,
-            loader: isForge ? 'forge' : isFabric ? 'fabric' : isOptiFine ? 'optifine' : isNeoForge ? 'neoforge' : 'quilt',
-            isolated: true,
-            instanceDir: instanceDir
-          };
+          const loaderName = isForge ? 'Forge' : isFabric ? 'Fabric' : isOptiFine ? 'OptiFine' : isNeoForge ? 'NeoForge' : 'Quilt';
+          console.error(`Failed to download ${loaderName} profile for ${versionId}`);
+          return { success: false, error: `Failed to download ${loaderName} profile for ${mcVersion}. Check your internet connection and try again.` };
         }
 
         await fs.writeJson(path.join(versionDir, `${versionId}.json`), moddedJson, { spaces: 2 });
@@ -909,7 +1042,6 @@ class MinecraftLauncher {
       try {
         const zip = new AdmZip(jarPath);
 
-        // Try Fabric: fabric.mod.json
         const fabricModEntry = zip.getEntry('fabric.mod.json');
         if (fabricModEntry) {
           try {
@@ -929,7 +1061,6 @@ class MinecraftLauncher {
           } catch (e) {}
         }
 
-        // Try Forge: META-INF/mods.toml
         const modsTomlEntry = zip.getEntry('META-INF/mods.toml');
         if (modsTomlEntry) {
           try {
@@ -956,7 +1087,6 @@ class MinecraftLauncher {
           } catch (e) {}
         }
 
-        // Try Forge legacy: mcmod.info
         const mcmodEntry = zip.getEntry('mcmod.info');
         if (mcmodEntry) {
           try {
@@ -977,7 +1107,6 @@ class MinecraftLauncher {
           } catch (e) {}
         }
 
-        // Try NeoForge: META-INF/neoforge.mods.toml
         const neoforgeTomlEntry = zip.getEntry('META-INF/neoforge.mods.toml');
         if (neoforgeTomlEntry) {
           try {
@@ -1001,7 +1130,6 @@ class MinecraftLauncher {
           } catch (e) {}
         }
 
-        // Try Quilt: quilt.mod.json
         const quiltModEntry = zip.getEntry('quilt.mod.json');
         if (quiltModEntry) {
           try {
@@ -1183,6 +1311,14 @@ class MinecraftLauncher {
       }
     }
     const skinPath = path.join(this.minecraftDir, 'skin.png');
+    if (!await fs.pathExists(skinPath) && elyAuth && elyAuth.skin) {
+      try {
+        const base64Data = elyAuth.skin.replace(/^data:image\/png;base64,/, '');
+        await fs.writeFile(skinPath, base64Data, 'base64');
+      } catch (e) {
+        console.warn('Failed to save skin from account data:', e.message);
+      }
+    }
     if (await fs.pathExists(skinPath)) {
       const assetsSkinsDir = path.join(instanceDir, 'assets', 'skins');
       await fs.ensureDir(assetsSkinsDir);
@@ -1207,7 +1343,10 @@ class MinecraftLauncher {
       if (libPath && await fs.pathExists(libPath)) libraries.push(libPath);
     }
     const jarPath = path.join(this.versionsDir, version, `${version}.jar`);
-    libraries.push(jarPath);
+    // For Forge/NeoForge we should NOT add jarPath to classpath; it will be added via -p later.
+    if (!(isForge || isNeoForge)) {
+      libraries.push(jarPath);
+    }
 
     const seen = new Set();
     const uniqueLibraries = [];
@@ -1264,21 +1403,48 @@ class MinecraftLauncher {
         console.warn(`Failed to extract native ${nativeLib.name}:`, e.message);
       }
     }
+    async function findNativeFiles(dir, ext) {
+      const results = [];
+      const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) results.push(...await findNativeFiles(full, ext));
+        else if (entry.name.endsWith(ext)) results.push(full);
+      }
+      return results;
+    }
+    for (const ext of ['.dll', '.so', '.dylib']) {
+      const files = await findNativeFiles(nativesDir, ext);
+      for (const filePath of files) {
+        const target = path.join(nativesDir, path.basename(filePath));
+        if (filePath !== target) await fs.copy(filePath, target, { overwrite: true });
+      }
+      if (files.length) console.log(`Flattened ${files.length} native ${ext} files to root`);
+    }
     const extractedNativeFiles = await fs.readdir(nativesDir).catch(() => []);
-    console.log(`Natives directory (${nativesDir}): ${extractedNativeFiles.length} files extracted`);
+    const dllFiles = extractedNativeFiles.filter(f => f.endsWith('.dll'));
+    console.log(`Natives directory (${nativesDir}): ${extractedNativeFiles.length} files, ${dllFiles.length} DLLs at root`);
+    if (dllFiles.length > 0) console.log(`DLLs: ${dllFiles.join(', ')}`);
+    else console.warn('WARNING: No DLLs found at natives root! LWJGL will fail to load.');
     await this.downloadAuthlibInjector();
 
     const mcVersion = version.split('-')[0];
+    const loaderVersion = version.split('-').length > 2 ? version.split('-')[2] : '';
     let javaPath = null;
 
     if (preferredJava) {
-      console.log(`User preferred Java ${preferredJava} specified`);
-      javaPath = await this.javaManager.getJavaExecutable(preferredJava);
-
-      if (javaPath) {
-        console.log(`Using preferred Java ${preferredJava}: ${javaPath}`);
+      const requiredJava = this.javaManager.getJavaVersionForMinecraft(mcVersion);
+      if (preferredJava !== requiredJava) {
+        console.warn(`Preferred Java ${preferredJava} is incompatible with MC ${mcVersion} (needs Java ${requiredJava}), falling back to auto-detection`);
       } else {
-        console.warn(`Preferred Java ${preferredJava} not found, falling back to auto-detection`);
+        console.log(`User preferred Java ${preferredJava} specified`);
+        javaPath = await this.javaManager.getJavaExecutable(preferredJava);
+
+        if (javaPath) {
+          console.log(`Using preferred Java ${preferredJava}: ${javaPath}`);
+        } else {
+          console.warn(`Preferred Java ${preferredJava} not found, falling back to auto-detection`);
+        }
       }
     }
 
@@ -1309,9 +1475,12 @@ class MinecraftLauncher {
         if (systemJava && systemJava.version === requiredVersion) {
           console.log(`Using system Java ${systemJava.version}`);
           javaPath = 'java';
+        } else if (systemJava) {
+          console.warn(`System Java ${systemJava.version} is incompatible with MC ${mcVersion} (needs Java ${requiredVersion}). Cannot launch.`);
+          throw new Error(`Java ${requiredVersion} is required for Minecraft ${mcVersion}, but only Java ${systemJava.version} is available. Please install Java ${requiredVersion}.`);
         } else {
-          console.warn(`Java ${requiredVersion} not found, trying system 'java' command as fallback`);
-          javaPath = 'java';
+          console.warn(`Java ${requiredVersion} not found and no system Java available`);
+          throw new Error(`Java ${requiredVersion} is required for Minecraft ${mcVersion}. Please install Java ${requiredVersion}.`);
         }
       }
     }
@@ -1333,26 +1502,213 @@ class MinecraftLauncher {
     const optimizationArgs = this.getOptimizationArgs(optimizationProfile, memory);
     let authlibArgs = [];
     if (await fs.pathExists(this.authlibPath)) authlibArgs = [`-javaagent:${this.authlibPath}=ely.by`];
-    const jvmArgs = [
+
+    // Извлекаем JVM аргументы из version JSON с фильтрацией по правилам
+    let loaderJvmArgs = [];
+    const versionJvmArgs = resolvedJson.arguments?.jvm || [];
+    const currentOS = os.platform() === 'win32' ? 'windows' : os.platform() === 'darwin' ? 'macos' : 'linux';
+
+    for (const arg of versionJvmArgs) {
+      if (typeof arg === 'string') {
+        // Строковые аргументы применяются всегда, но мы отфильтруем macOS-специфичные позже
+        loaderJvmArgs.push(arg);
+      } else if (arg.rules) {
+        // Проверяем правила
+        let applicable = false;
+        // Найдём первое подходящее правило по OS
+        for (const rule of arg.rules) {
+          if (rule.os && rule.os.name) {
+            if (rule.os.name === currentOS) {
+              applicable = (rule.action === 'allow');
+              break;
+            }
+          }
+        }
+        // Если нет правила, совпадающего с OS, то по умолчанию не применимо
+        if (applicable && arg.value) {
+          const values = Array.isArray(arg.value) ? arg.value : [arg.value];
+          for (const v of values) {
+            let resolved = v
+              .replace(/\$\{library_directory\}/g, this.librariesDir)
+              .replace(/\$\{classpath_separator\}/g, path.delimiter)
+              .replace(/\$\{version_name\}/g, version)
+              .replace(/\$\{natives_directory\}/g, nativesDir)
+              .replace(/\$\{user_properties\}/g, '{}');
+            loaderJvmArgs.push(resolved);
+          }
+        }
+      }
+    }
+
+    // Фильтруем явно macOS-специфичные аргументы, которые могли остаться как строки
+    if (currentOS === 'windows') {
+      loaderJvmArgs = loaderJvmArgs.filter(arg => !arg.includes('-XstartOnFirstThread'));
+    }
+
+    // Заменяем ${classpath} в loaderJvmArgs на реальный classpath
+    loaderJvmArgs = loaderJvmArgs.map(a => {
+      if (a.includes('${classpath}')) return a.replace(/\$\{classpath\}/g, classpath);
+      if (a === '${classpath}') return classpath;
+      return a;
+    });
+
+    // Убираем -cp и следующий за ним аргумент из loaderJvmArgs,
+    // но оставляем -p и другие аргументы нетронутыми.
+    let filteredLoaderJvmArgs = [];
+    for (let i = 0; i < loaderJvmArgs.length; i++) {
+      const arg = loaderJvmArgs[i];
+      if (arg === '-cp') {
+        // Пропускаем этот аргумент и следующий (путь к classpath)
+        i++; // пропускаем следующий
+        continue;
+      }
+      filteredLoaderJvmArgs.push(arg);
+    }
+    loaderJvmArgs = filteredLoaderJvmArgs;
+
+    // Также удаляем длинные строки, содержащие path.delimiter, которые могут быть classpath
+    loaderJvmArgs = loaderJvmArgs.filter(a => !(a.includes(path.delimiter) && a.length > 500));
+
+    // Определяем, есть ли уже -p
+    const hasModulePath = loaderJvmArgs.some(a => a === '-p');
+    const hasAddModules = loaderJvmArgs.some(a => a.startsWith('--add-modules='));
+
+    // Формируем финальные JVM аргументы
+    let jvmArgs = [
       `-Xmx${memory}M`,
       `-Xms${Math.floor(memory / 2)}M`,
       ...optimizationArgs,
       '-Dlog4j2.level=warn',
       ...authlibArgs,
-      `-Djava.library.path=${nativesDir}`,
-      `-Dorg.lwjgl.opengl.Display.allowSoftwareOpenGL=false`,
-      selectedGPU > 0 ? `-Dprism.order=d3d` : '',
-      '-cp',
-      classpath
-    ].filter(arg => arg !== '');
+      ...loaderJvmArgs
+    ];
+
+    // Добавляем java.library.path, если его нет
+    if (!loaderJvmArgs.some(a => a.startsWith('-Djava.library.path='))) {
+      jvmArgs.push(`-Djava.library.path=${nativesDir}`);
+    }
+    if (!loaderJvmArgs.some(a => a.startsWith('-Dorg.lwjgl.librarypath='))) {
+      jvmArgs.push(`-Dorg.lwjgl.librarypath=${nativesDir}`);
+    }
+    if (!loaderJvmArgs.some(a => a.includes('allowSoftwareOpenGL'))) {
+      jvmArgs.push('-Dorg.lwjgl.opengl.Display.allowSoftwareOpenGL=false');
+    }
+    if (selectedGPU > 0) {
+      jvmArgs.push('-Dprism.order=d3d');
+    }
+
+    // Для Forge/NeoForge нужно добавить модульный путь с mapped классами
+    if (isForge || isNeoForge) {
+      // Находим forge-client.jar (содержит mapped net/minecraft/client/Minecraft.class)
+      const forgeClientLib = (resolvedJson.libraries || []).find(l =>
+        l.name && l.name.includes(':forge:') && l.name.endsWith(':client') &&
+        l.downloads && l.downloads.artifact
+      );
+      if (forgeClientLib) {
+        const forgeClientPath = path.join(this.librariesDir, forgeClientLib.downloads.artifact.path);
+        const moduleJarPath = path.join(versionDir, 'forge-client-module.jar');
+        await fs.copy(forgeClientPath, moduleJarPath, { overwrite: true });
+        // Добавляем module-info.class чтобы Java воспринимала JAR как модуль
+        const { execSync } = require('child_process');
+        const tmpDir = path.join(os.tmpdir(), `mc-module-${Date.now()}`);
+        await fs.ensureDir(tmpDir);
+        try {
+          await fs.writeFile(path.join(tmpDir, 'module-info.java'), 'module client {}');
+          execSync(`javac "${path.join(tmpDir, 'module-info.java')}"`, { cwd: tmpDir, stdio: 'ignore' });
+          execSync(`jar uf "${moduleJarPath}" -C "${tmpDir}" module-info.class`, { stdio: 'ignore' });
+          console.log('Injected module-info.class into forge-client JAR for module path');
+        } catch (e) {
+          console.warn('Failed to create module-info.class:', e.message);
+        } finally {
+          await fs.remove(tmpDir).catch(() => {});
+        }
+        if (!hasModulePath) {
+          jvmArgs.push('-p', moduleJarPath);
+        }
+      } else {
+        console.warn('Forge client library not found, skipping -p module path');
+      }
+      if (!hasAddModules) {
+        jvmArgs.push('--add-modules=ALL-MODULE-PATH');
+      }
+    }
+
+    // Добавляем -cp и classpath в самом конце (после модульных аргументов)
+    jvmArgs.push('-cp', classpath);
+
     const assetIndexId = resolvedJson.assetIndex?.id || resolvedJson.assets || version.split('-')[0];
     const mainClass = resolvedJson.mainClass;
     if (!mainClass) throw new Error('No main class found');
     const playerUUID = elyAuth && elyAuth.uuid ? elyAuth.uuid.replace(/-/g, '') : this.generateUUID();
     const accessToken = elyAuth && elyAuth.accessToken ? elyAuth.accessToken : 'null';
     const userType = elyAuth ? 'msa' : 'legacy';
-    const gameArgs = [
-      mainClass,
+
+    // Извлекаем game args из version JSON (Forge/NeoForge уже содержат --launchTarget, --fml.* и т.д.)
+    let loaderGameArgs = [];
+    const versionGameArgs = resolvedJson.arguments?.game || [];
+    for (const arg of versionGameArgs) {
+      if (typeof arg === 'string') {
+        let resolved = arg
+          .replace(/\$\{auth_player_name\}/g, username)
+          .replace(/\$\{auth_session\}/g, accessToken)
+          .replace(/\$\{user_properties\}/g, '{}')
+          .replace(/\$\{version_name\}/g, version)
+          .replace(/\$\{game_directory\}/g, instanceDir)
+          .replace(/\$\{assets_root\}/g, this.assetsDir)
+          .replace(/\$\{assets_index_name\}/g, assetIndexId)
+          .replace(/\$\{auth_uuid\}/g, playerUUID)
+          .replace(/\$\{auth_access_token\}/g, accessToken)
+          .replace(/\$\{resolution_width\}/g, '854')
+          .replace(/\$\{resolution_height\}/g, '480')
+          .replace(/\$\{resolution_scale\}/g, '1')
+          .replace(/\${clientid}/g, '')
+          .replace(/\${auth_xuid}/g, '')
+          .replace(/\$\{user_type\}/g, userType)
+          .replace(/\$\{version_type\}/g, isForge ? 'forge' : isFabric ? 'fabric' : isOptiFine ? 'optifine' : isNeoForge ? 'neoforge' : isQuilt ? 'quilt' : 'release')
+          .replace(/\$\{quickPlayPath\}/g, '')
+          .replace(/\$\{quickPlaySingleplayer\}/g, '')
+          .replace(/\$\{quickPlayMultiplayer\}/g, '')
+          .replace(/\$\{quickPlayRealms\}/g, '');
+        loaderGameArgs.push(resolved);
+      } else if (arg.rules) {
+        let applicable = false;
+        for (const rule of arg.rules) {
+          if (rule.os && rule.os.name) {
+            if (rule.os.name === currentOS) {
+              applicable = (rule.action === 'allow');
+              break;
+            }
+          }
+        }
+        if (applicable && arg.value) {
+          const values = Array.isArray(arg.value) ? arg.value : [arg.value];
+          for (const v of values) {
+            let resolved = v
+              .replace(/\$\{auth_player_name\}/g, username)
+              .replace(/\$\{auth_session\}/g, accessToken)
+              .replace(/\$\{version_name\}/g, version)
+              .replace(/\$\{game_directory\}/g, instanceDir)
+              .replace(/\$\{assets_root\}/g, this.assetsDir)
+              .replace(/\$\{assets_index_name\}/g, assetIndexId)
+              .replace(/\$\{auth_uuid\}/g, playerUUID)
+              .replace(/\$\{auth_access_token\}/g, accessToken)
+              .replace(/\$\{resolution_width\}/g, '854')
+              .replace(/\$\{resolution_height\}/g, '480')
+              .replace(/\$\{resolution_scale\}/g, '1')
+              .replace(/\$\{user_type\}/g, userType)
+              .replace(/\$\{version_type\}/g, isForge ? 'forge' : isFabric ? 'fabric' : isOptiFine ? 'optifine' : isNeoForge ? 'neoforge' : isQuilt ? 'quilt' : 'release')
+              .replace(/\$\{quickPlayPath\}/g, '')
+              .replace(/\$\{quickPlaySingleplayer\}/g, '')
+              .replace(/\$\{quickPlayMultiplayer\}/g, '')
+              .replace(/\$\{quickPlayRealms\}/g, '');
+            loaderGameArgs.push(resolved);
+          }
+        }
+      }
+    }
+
+    // Всегда добавляем стандартные Minecraft аргументы + аргументы из JSON
+    const standardArgs = [
       '--username', username,
       '--version', version,
       '--gameDir', instanceDir,
@@ -1361,28 +1717,90 @@ class MinecraftLauncher {
       '--uuid', playerUUID,
       '--accessToken', accessToken,
       '--userType', userType,
-      '--versionType', isForge ? 'forge' : isFabric ? 'fabric' : isOptiFine ? 'optifine' : isNeoForge ? 'neoforge' : isQuilt ? 'quilt' : 'release'
+      '--versionType', isForge ? 'forge' : isFabric ? 'fabric' : isOptiFine ? 'optifine' : isNeoForge ? 'neoforge' : isQuilt ? 'quilt' : 'release',
     ];
-    const allArgs = [...jvmArgs, ...gameArgs];
+    const gameArgs = [...loaderGameArgs, ...standardArgs.filter(a => !loaderGameArgs.includes(a))];
+    // Добавляем --launchTarget если ещё нет
+    if ((isForge || isNeoForge) && !gameArgs.some(a => a === '--launchTarget')) {
+      gameArgs.push('--launchTarget', 'fmlclient');
+    }
+    let allArgs = [...jvmArgs, mainClass, ...gameArgs];
     console.log('Launching:', version);
     console.log('Java path:', javaPath);
+    console.log('Classpath entries:', libraries.length);
+    console.log('Classpath length:', classpath.length);
+    console.log('Has bootstrap:', classpath.includes('bootstrap'));
+    console.log('Has ForgeBootstrap mainClass:', mainClass);
+    const bootstrapIdx = classpath.indexOf('bootstrap');
+    if (bootstrapIdx >= 0) {
+      console.log('Bootstrap in classpath at pos:', bootstrapIdx, 'context:', classpath.substring(Math.max(0, bootstrapIdx - 30), bootstrapIdx + 60));
+    } else {
+      console.log('WARNING: bootstrap NOT found in classpath!');
+      console.log('Classpath preview:', classpath.substring(0, 200));
+    }
+
+    // Если командная строка слишком длинная (>8000 символов), используем argfile
+    const estimatedLength = allArgs.reduce((sum, a) => sum + a.length + 1, 0) + javaPath.length;
+    console.log('Estimated command line length:', estimatedLength, 'args:', allArgs.length);
+    let useArgFile = false;
+    let argFilePath = null;
+    if (estimatedLength > 8000) {
+      console.log(`Command line too long (${estimatedLength} chars), using argfile`);
+      useArgFile = true;
+      argFilePath = path.join(instanceDir, `.jvm_args_${Date.now()}.txt`);
+      const argFileContent = allArgs.map(a => {
+        if (a.includes(' ') || a.includes('"')) {
+          return `"${a.replace(/"/g, '""')}"`;
+        }
+        return a;
+      }).join('\n');
+      await fs.writeFile(argFilePath, argFileContent, 'utf-8');
+      allArgs = [`@${argFilePath}`];
+    }
+
     const gameProcess = spawn(javaPath, allArgs, {
       cwd: instanceDir,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe']
     });
-    const { exec } = require('child_process');
-    exec(`powershell -NoProfile -Command "Get-Process -Id ${gameProcess.pid} -ErrorAction SilentlyContinue | ForEach-Object { $_.PriorityClass = 'High' }"`, { timeout: 5000 }, () => {});
+    try {
+      const { spawn: spawnChild } = require('child_process');
+      const priorityProc = spawnChild('powershell', [
+        '-NoProfile', '-Command',
+        `Get-Process -Id ${gameProcess.pid} -ErrorAction SilentlyContinue | ForEach-Object { $_.PriorityClass = 'High' }`
+      ], { timeout: 5000, stdio: 'ignore' });
+      priorityProc.on('error', () => {});
+      priorityProc.unref();
+    } catch (e) {}
     gameProcess.on('error', (error) => console.error('Failed to start game:', error));
     gameProcess.on('exit', (code) => {
       console.log(`Game exited with code ${code}`);
       setTimeout(async () => {
         try { await fs.remove(nativesDir); } catch (err) { console.warn('Failed to clean natives:', err); }
+        if (argFilePath) {
+          try { await fs.remove(argFilePath); } catch (err) {}
+        }
       }, 5000);
     });
     gameProcess.unref();
-    gameProcess.stdout.on('data', () => {});
-    gameProcess.stderr.on('data', () => {});
+    let stderrBuffer = '';
+    gameProcess.stdout.on('data', (data) => {
+      const text = data.toString();
+      if (text.includes('Error') || text.includes('Exception') || text.includes('error')) {
+        console.error('[GAME STDOUT]', text.trim());
+      }
+    });
+    gameProcess.stderr.on('data', (data) => {
+      const text = data.toString();
+      stderrBuffer += text;
+      if (stderrBuffer.length > 10240) stderrBuffer = stderrBuffer.slice(-10240);
+      console.error('[GAME STDERR]', text.trim());
+    });
+    gameProcess.on('close', (code) => {
+      if (code !== 0 && stderrBuffer) {
+        console.error('Game crash details:', stderrBuffer.substring(0, 2000));
+      }
+    });
     return { success: true, pid: gameProcess.pid, process: gameProcess };
   }
 

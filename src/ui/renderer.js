@@ -776,7 +776,8 @@ async function launchGame() {
         refreshToken: activeAccount.refreshToken,
         expiresAt: activeAccount.expiresAt,
         username: activeAccount.username,
-        uuid: activeAccount.uuid
+        uuid: activeAccount.uuid,
+        skin: activeAccount.skin || null
       } : null,
       preferredJava: currentConfig.preferredJava
     };

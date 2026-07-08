@@ -151,7 +151,17 @@ ipcMain.handle('download-version', async (event, version) => {
   });
 });
 ipcMain.handle('launch-game', async (event, config) => {
-  const result = await launcher.launchGame(config);
+  const LAUNCH_TIMEOUT = 300000;
+  let result;
+  try {
+    result = await Promise.race([
+      launcher.launchGame(config),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Launch timed out after 5 minutes')), LAUNCH_TIMEOUT))
+    ]);
+  } catch (error) {
+    console.error('Launch failed:', error.message);
+    return { success: false, error: error.message };
+  }
   if (result.success && result.pid) {
     const sessionId = await statsManager.recordLaunch(config.version);
     const instanceId = Date.now().toString();
@@ -955,7 +965,18 @@ ipcMain.handle('accounts-remove', async (event, accountId) => {
   try { await accountManager.removeAccount(accountId); return { success: true }; } catch (error) { return { success: false, error: error.message }; }
 });
 ipcMain.handle('accounts-update-skin', async (event, accountId, skinData) => {
-  try { const account = await accountManager.updateAccountSkin(accountId, skinData); return { success: true, account }; } catch (error) { return { success: false, error: error.message }; }
+  try {
+    const account = await accountManager.updateAccountSkin(accountId, skinData);
+    // Also save skin.png for game launch
+    const skinPath = path.join(os.homedir(), '.minecraft_custom', 'skin.png');
+    if (skinData) {
+      const base64Data = skinData.replace(/^data:image\/png;base64,/, '');
+      await fs.writeFile(skinPath, base64Data, 'base64');
+    } else {
+      if (await fs.pathExists(skinPath)) await fs.remove(skinPath);
+    }
+    return { success: true, account };
+  } catch (error) { return { success: false, error: error.message }; }
 });
 ipcMain.handle('accounts-get', async (event, accountId) => {
   try { const account = accountManager.getAccount(accountId); return { success: true, account }; } catch (error) { return { success: false, error: error.message }; }
@@ -1386,11 +1407,14 @@ ipcMain.handle('read-file-text', async (event, filePath) => {
     const fs = require('fs-extra');
     const stats = await fs.stat(filePath);
     if (stats.size > 5 * 1024 * 1024) {
-      const buffer = Buffer.alloc(5 * 1024 * 1024);
-      const fd = await fs.open(filePath, 'r');
-      await fd.read(buffer, 0, 5 * 1024 * 1024, 0);
-      await fd.close();
-      return { success: true, content: buffer.toString('utf8') + '\n\n... (файл обрезан, слишком большой)' };
+      const { createReadStream } = require('fs');
+      const stream = createReadStream(filePath, { encoding: 'utf8', highWaterMark: 64 * 1024 });
+      let content = '';
+      for await (const chunk of stream) {
+        content += chunk;
+        if (content.length > 5 * 1024 * 1024) break;
+      }
+      return { success: true, content: content + '\n\n... (файл обрезан, слишком большой)' };
     }
     const content = await fs.readFile(filePath, 'utf8');
     return { success: true, content };

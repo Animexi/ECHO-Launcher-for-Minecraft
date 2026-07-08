@@ -48,7 +48,7 @@ class ModLoaderAPI {
         }
       });
 
-      const mcVersionsOrder = ['1.21.1', '1.21', '1.20.6', '1.20.5', '1.20.4', '1.20.3', '1.20.2', '1.20.1', '1.20', '1.19.4', '1.19.3', '1.19.2', '1.19.1', '1.19', '1.18.2', '1.18.1', '1.18', '1.17.1', '1.17', '1.16.5', '1.16.4', '1.16.3', '1.16.2', '1.16.1', '1.15.2', '1.14.4', '1.13.2', '1.12.2', '1.11.2', '1.10.2', '1.9.4', '1.8.9', '1.7.10'];
+      const mcVersionsOrder = ['1.21.8', '1.21.7', '1.21.6', '1.21.5', '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.5', '1.20.4', '1.20.3', '1.20.2', '1.20.1', '1.20', '1.19.4', '1.19.3', '1.19.2', '1.19.1', '1.19', '1.18.2', '1.18.1', '1.18', '1.17.1', '1.17', '1.16.5', '1.16.4', '1.16.3', '1.16.2', '1.16.1', '1.15.2', '1.14.4', '1.13.2', '1.12.2', '1.11.2', '1.10.2', '1.9.4', '1.8.9', '1.7.10'];
 
       for (const mcVer of mcVersionsOrder) {
         if (versionMap.has(mcVer)) {
@@ -90,7 +90,13 @@ class ModLoaderAPI {
 
   getFallbackForgeVersions() {
     return [
-      { id: '1.21.1-forge-52.0.16', mcVersion: '1.21.1', forgeVersion: '52.0.16', type: 'release', loader: 'forge' },
+      { id: '1.21.8-forge-58.0.3', mcVersion: '1.21.8', forgeVersion: '58.0.3', type: 'release', loader: 'forge' },
+      { id: '1.21.7-forge-57.0.3', mcVersion: '1.21.7', forgeVersion: '57.0.3', type: 'release', loader: 'forge' },
+      { id: '1.21.6-forge-56.0.9', mcVersion: '1.21.6', forgeVersion: '56.0.9', type: 'release', loader: 'forge' },
+      { id: '1.21.5-forge-55.0.24', mcVersion: '1.21.5', forgeVersion: '55.0.24', type: 'release', loader: 'forge' },
+      { id: '1.21.4-forge-54.1.6', mcVersion: '1.21.4', forgeVersion: '54.1.6', type: 'release', loader: 'forge' },
+      { id: '1.21.3-forge-53.1.2', mcVersion: '1.21.3', forgeVersion: '53.1.2', type: 'release', loader: 'forge' },
+      { id: '1.21.1-forge-52.1.2', mcVersion: '1.21.1', forgeVersion: '52.1.2', type: 'release', loader: 'forge' },
       { id: '1.20.1-forge-47.3.0', mcVersion: '1.20.1', forgeVersion: '47.3.0', type: 'release', loader: 'forge' },
       { id: '1.20.1-forge-47.2.20', mcVersion: '1.20.1', forgeVersion: '47.2.20', type: 'release', loader: 'forge' },
       { id: '1.20.1-forge-47.2.0', mcVersion: '1.20.1', forgeVersion: '47.2.0', type: 'release', loader: 'forge' },
@@ -162,7 +168,14 @@ class ModLoaderAPI {
 
   getFallbackFabricVersions() {
     return [
-      { id: '1.21.1-fabric-0.16.9', mcVersion: '1.21.1', fabricVersion: '0.16.9', type: 'stable', loader: 'fabric' },
+      { id: '1.21.8-fabric-0.19.3', mcVersion: '1.21.8', fabricVersion: '0.19.3', type: 'stable', loader: 'fabric' },
+      { id: '1.21.7-fabric-0.19.3', mcVersion: '1.21.7', fabricVersion: '0.19.3', type: 'stable', loader: 'fabric' },
+      { id: '1.21.6-fabric-0.19.3', mcVersion: '1.21.6', fabricVersion: '0.19.3', type: 'stable', loader: 'fabric' },
+      { id: '1.21.5-fabric-0.19.3', mcVersion: '1.21.5', fabricVersion: '0.19.3', type: 'stable', loader: 'fabric' },
+      { id: '1.21.4-fabric-0.19.3', mcVersion: '1.21.4', fabricVersion: '0.19.3', type: 'stable', loader: 'fabric' },
+      { id: '1.21.3-fabric-0.19.3', mcVersion: '1.21.3', fabricVersion: '0.19.3', type: 'stable', loader: 'fabric' },
+      { id: '1.21.2-fabric-0.19.3', mcVersion: '1.21.2', fabricVersion: '0.19.3', type: 'stable', loader: 'fabric' },
+      { id: '1.21.1-fabric-0.19.3', mcVersion: '1.21.1', fabricVersion: '0.19.3', type: 'stable', loader: 'fabric' },
       { id: '1.21-fabric-0.16.9', mcVersion: '1.21', fabricVersion: '0.16.9', type: 'stable', loader: 'fabric' },
       { id: '1.20.6-fabric-0.16.0', mcVersion: '1.20.6', fabricVersion: '0.16.0', type: 'stable', loader: 'fabric' },
       { id: '1.20.5-fabric-0.15.11', mcVersion: '1.20.5', fabricVersion: '0.15.11', type: 'stable', loader: 'fabric' },
@@ -248,12 +261,23 @@ class ModLoaderAPI {
       const neoforgeToMcMap = (ver) => {
         const parts = ver.split('.').map(Number);
         if (parts[0] >= 47 && parts[0] <= 48) return '1.20.1';
-        if (parts[0] === 20 && parts[1] >= 2 && parts[1] <= 2) return '1.20.2';
-        if (parts[0] === 20 && parts[1] >= 3 && parts[1] <= 3) return '1.20.3';
-        if (parts[0] === 20 && parts[1] >= 4 && parts[1] <= 4) return '1.20.4';
+        if (parts[0] === 20 && parts[1] === 2) return '1.20.2';
+        if (parts[0] === 20 && parts[1] === 3) return '1.20.3';
+        if (parts[0] === 20 && parts[1] === 4) return '1.20.4';
         if (parts[0] === 20 && parts[1] >= 5 && parts[1] <= 6) return '1.20.6';
         if (parts[0] === 21 && parts[1] === 0) return '1.21';
-        if (parts[0] === 21 && parts[1] >= 1) return '1.21.1';
+        if (parts[0] === 21 && parts[1] >= 1 && parts[1] <= 1) return '1.21.1';
+        if (parts[0] === 21 && parts[1] >= 2 && parts[1] <= 2) return '1.21.2';
+        if (parts[0] === 21 && parts[1] >= 3 && parts[1] <= 3) return '1.21.3';
+        if (parts[0] === 21 && parts[1] >= 4 && parts[1] <= 4) return '1.21.4';
+        if (parts[0] === 21 && parts[1] >= 5 && parts[1] <= 5) return '1.21.5';
+        if (parts[0] === 21 && parts[1] >= 6 && parts[1] <= 6) return '1.21.6';
+        if (parts[0] === 21 && parts[1] >= 7 && parts[1] <= 7) return '1.21.7';
+        if (parts[0] === 21 && parts[1] >= 8 && parts[1] <= 8) return '1.21.8';
+        if (parts[0] === 21 && parts[1] >= 9 && parts[1] <= 9) return '1.21.9';
+        if (parts[0] === 21 && parts[1] >= 10 && parts[1] <= 10) return '1.21.10';
+        if (parts[0] === 21 && parts[1] >= 11) return `1.21.${parts[1]}`;
+        if (parts[0] === 26) return `${parts[0]}.${parts[1]}`;
         return `1.${parts[0]}.${parts[1]}`;
       };
 
@@ -271,7 +295,7 @@ class ModLoaderAPI {
         });
       });
 
-      const mcOrder = ['1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.3', '1.20.2', '1.20.1'];
+      const mcOrder = ['1.21.8', '1.21.7', '1.21.6', '1.21.5', '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.3', '1.20.2', '1.20.1'];
       for (const mcVer of mcOrder) {
         if (mcVersionMap.has(mcVer)) {
           const vers = mcVersionMap.get(mcVer);
@@ -307,9 +331,14 @@ class ModLoaderAPI {
 
   getFallbackNeoForgeVersions() {
     return [
-      { id: '1.21.1-neoforge-21.1.77', mcVersion: '1.21.1', neoforgeVersion: '21.1.77', type: 'release', loader: 'neoforge' },
+      { id: '1.21.8-neoforge-21.8.53', mcVersion: '1.21.8', neoforgeVersion: '21.8.53', type: 'release', loader: 'neoforge' },
+      { id: '1.21.7-neoforge-21.7.25', mcVersion: '1.21.7', neoforgeVersion: '21.7.25', type: 'release', loader: 'neoforge' },
+      { id: '1.21.6-neoforge-21.6.20', mcVersion: '1.21.6', neoforgeVersion: '21.6.20', type: 'release', loader: 'neoforge' },
+      { id: '1.21.5-neoforge-21.5.97', mcVersion: '1.21.5', neoforgeVersion: '21.5.97', type: 'release', loader: 'neoforge' },
+      { id: '1.21.4-neoforge-21.4.157', mcVersion: '1.21.4', neoforgeVersion: '21.4.157', type: 'release', loader: 'neoforge' },
+      { id: '1.21.3-neoforge-21.3.96', mcVersion: '1.21.3', neoforgeVersion: '21.3.96', type: 'release', loader: 'neoforge' },
+      { id: '1.21.1-neoforge-21.1.235', mcVersion: '1.21.1', neoforgeVersion: '21.1.235', type: 'release', loader: 'neoforge' },
       { id: '1.21-neoforge-21.0.167', mcVersion: '1.21', neoforgeVersion: '21.0.167', type: 'release', loader: 'neoforge' },
-      { id: '1.21-neoforge-21.0.42', mcVersion: '1.21', neoforgeVersion: '21.0.42', type: 'release', loader: 'neoforge' },
       { id: '1.20.6-neoforge-20.6.213', mcVersion: '1.20.6', neoforgeVersion: '20.6.213', type: 'release', loader: 'neoforge' },
       { id: '1.20.6-neoforge-20.6.119', mcVersion: '1.20.6', neoforgeVersion: '20.6.119', type: 'release', loader: 'neoforge' },
       { id: '1.20.4-neoforge-20.4.237', mcVersion: '1.20.4', neoforgeVersion: '20.4.237', type: 'release', loader: 'neoforge' },
@@ -363,7 +392,14 @@ class ModLoaderAPI {
 
   getFallbackQuiltVersions() {
     return [
-      { id: '1.21.1-quilt-0.27.0', mcVersion: '1.21.1', quiltVersion: '0.27.0', type: 'stable', loader: 'quilt' },
+      { id: '1.21.8-quilt-0.29.2', mcVersion: '1.21.8', quiltVersion: '0.29.2', type: 'stable', loader: 'quilt' },
+      { id: '1.21.7-quilt-0.29.2', mcVersion: '1.21.7', quiltVersion: '0.29.2', type: 'stable', loader: 'quilt' },
+      { id: '1.21.6-quilt-0.29.2', mcVersion: '1.21.6', quiltVersion: '0.29.2', type: 'stable', loader: 'quilt' },
+      { id: '1.21.5-quilt-0.29.2', mcVersion: '1.21.5', quiltVersion: '0.29.2', type: 'stable', loader: 'quilt' },
+      { id: '1.21.4-quilt-0.29.2', mcVersion: '1.21.4', quiltVersion: '0.29.2', type: 'stable', loader: 'quilt' },
+      { id: '1.21.3-quilt-0.29.2', mcVersion: '1.21.3', quiltVersion: '0.29.2', type: 'stable', loader: 'quilt' },
+      { id: '1.21.2-quilt-0.29.2', mcVersion: '1.21.2', quiltVersion: '0.29.2', type: 'stable', loader: 'quilt' },
+      { id: '1.21.1-quilt-0.29.2', mcVersion: '1.21.1', quiltVersion: '0.29.2', type: 'stable', loader: 'quilt' },
       { id: '1.21-quilt-0.27.0', mcVersion: '1.21', quiltVersion: '0.27.0', type: 'stable', loader: 'quilt' },
       { id: '1.20.6-quilt-0.26.0', mcVersion: '1.20.6', quiltVersion: '0.26.0', type: 'stable', loader: 'quilt' },
       { id: '1.20.5-quilt-0.26.0', mcVersion: '1.20.5', quiltVersion: '0.26.0', type: 'stable', loader: 'quilt' },

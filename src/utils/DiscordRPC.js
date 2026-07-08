@@ -11,6 +11,7 @@ class DiscordRPCManager {
     this.reconnectTimer = null;
     this.lastActivity = null;
     this._ready = false;
+    this._reconnectAttempts = 0;
   }
 
   _getSocketPaths() {
@@ -73,6 +74,7 @@ class DiscordRPCManager {
             clearTimeout(timeout);
             this.connected = true;
             this._ready = true;
+            this._reconnectAttempts = 0;
             console.log('[Discord RPC] Connected');
             if (this.lastActivity) {
               this.setActivity(this.lastActivity);
@@ -162,13 +164,19 @@ class DiscordRPCManager {
 
   _scheduleReconnect() {
     if (this.reconnectTimer || !this.clientId) return;
+    if (this._reconnectAttempts >= 5) {
+      console.warn('[Discord RPC] Max reconnect attempts reached, giving up');
+      return;
+    }
+    this._reconnectAttempts++;
+    const delay = Math.min(1000 * Math.pow(2, this._reconnectAttempts), 60000);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.clientId) {
         console.log('[Discord RPC] Reconnecting...');
         this.init(this.clientId);
       }
-    }, 10000);
+    }, delay);
   }
 
   destroy() {
