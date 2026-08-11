@@ -66,9 +66,11 @@ class ElyByAuth {
   async startOAuthFlow() {
     return new Promise((resolve, reject) => {
       const state = this.generateState();
+      // Используем HTTP callback вместо OOB, так как у нас есть локальный сервер
+      const redirectUri = 'http://localhost:25585/callback';
       const authParams = new URLSearchParams({
         client_id: this.clientId,
-        redirect_uri: this.redirectUri,
+        redirect_uri: redirectUri,
         response_type: 'code',
         scope: 'account_info minecraft_server_session',
         state: state
@@ -173,9 +175,10 @@ class ElyByAuth {
 
   async exchangeCodeForTokens(code) {
     try {
+      const redirectUri = 'http://localhost:25585/callback';
       const response = await axios.post(`${this.authUrl}/token`, {
         client_id: this.clientId,
-        redirect_uri: this.redirectUri,
+        redirect_uri: redirectUri,
         grant_type: 'authorization_code',
         code: code
       }, {
@@ -229,8 +232,17 @@ class ElyByAuth {
           'Content-Type': 'application/json'
         }
       });
-      // Валидация прошла, но для получения данных нужно использовать другой эндпоинт.
-      // Пока возвращаем заглушку.
+      
+      // Получаем данные профиля из ответа validate
+      if (response.data && response.data.selectedProfile) {
+        return {
+          id: response.data.selectedProfile.id || null,
+          uuid: response.data.selectedProfile.id ? response.data.selectedProfile.id.replace(/-/g, '') : null,
+          username: response.data.selectedProfile.name || null,
+          email: response.data.user?.email || null
+        };
+      }
+      
       return {
         id: null,
         uuid: null,

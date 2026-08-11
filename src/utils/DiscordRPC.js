@@ -12,6 +12,7 @@ class DiscordRPCManager {
     this.lastActivity = null;
     this._ready = false;
     this._reconnectAttempts = 0;
+    this._initPromise = null;
   }
 
   _getSocketPaths() {
@@ -24,22 +25,34 @@ class DiscordRPCManager {
 
   async init(clientId) {
     if (!clientId) return false;
+    
+    // Если уже инициализируется, ждем завершения
+    if (this._initPromise) return this._initPromise;
+    
     this.destroy();
     this.clientId = clientId;
 
     const socketPaths = this._getSocketPaths();
 
+    let connected = false;
     for (const socketPath of socketPaths) {
       try {
-        const connected = await this._tryConnect(socketPath);
-        if (connected) return true;
+        connected = await this._tryConnect(socketPath);
+        if (connected) break;
       } catch (e) {
+        console.log(`[Discord RPC] Failed to connect to ${socketPath}: ${e.message}`);
         continue;
       }
     }
 
-    console.warn('[Discord RPC] Could not connect to Discord — is Discord running?');
-    return false;
+    if (!connected) {
+      console.warn('[Discord RPC] Could not connect to Discord — is Discord running?');
+      this._initPromise = null;
+      return false;
+    }
+    
+    this._initPromise = null;
+    return true;
   }
 
   _tryConnect(socketPath) {

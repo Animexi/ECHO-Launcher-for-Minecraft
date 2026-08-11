@@ -53,9 +53,10 @@ function createWelcomeWindow() {
     backgroundColor: '#0a0a0a',
     resizable: false,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      enableRemoteModule: false
+      nodeIntegration: false,
+      contextIsolation: true,
+      enableRemoteModule: false,
+      preload: path.join(__dirname, 'preload.js')
     },
     icon: path.join(__dirname, '../icon.png')
   });
@@ -77,9 +78,10 @@ function createWindow() {
     backgroundColor: '#0a0a0a',
     resizable: false,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      enableRemoteModule: false
+      nodeIntegration: false,
+      contextIsolation: true,
+      enableRemoteModule: false,
+      preload: path.join(__dirname, 'preload.js')
     },
     icon: path.join(__dirname, '../icon.png')
   });
@@ -163,8 +165,13 @@ ipcMain.handle('launch-game', async (event, config) => {
     return { success: false, error: error.message };
   }
   if (result.success && result.pid) {
-    const sessionId = await statsManager.recordLaunch(config.version);
     const instanceId = Date.now().toString();
+    let sessionId = null;
+    try {
+      sessionId = await statsManager.recordLaunch(config.version);
+    } catch (e) {
+      console.error('Failed to record launch session:', e.message);
+    }
     runningInstances.set(instanceId, {
       pid: result.pid,
       version: config.version,
@@ -319,7 +326,14 @@ ipcMain.handle('launch-game', async (event, config) => {
       console.log(`Process ${result.pid} exited with code ${code}`);
       discordRPC.clearActivity();
       setGameRunning(false);
-      await statsManager.recordGameEnd(sessionId);
+      const instance = runningInstances.get(instanceId);
+      if (instance && instance.sessionId) {
+        try {
+          await statsManager.recordGameEnd(instance.sessionId);
+        } catch (e) {
+          console.error('Failed to record game end:', e.message);
+        }
+      }
       runningInstances.delete(instanceId);
       mainWindow.webContents.send('instance-stopped', instanceId);
     });
@@ -428,7 +442,14 @@ ipcMain.handle('get-minecraft-files', async () => {
     const savesDir = path.join(minecraftDir, 'saves');
     if (await fs.pathExists(savesDir)) {
       const worlds = await fs.readdir(savesDir);
-      result.worlds = worlds.filter(async (w) => (await fs.stat(path.join(savesDir, w))).isDirectory());
+      const worldDirs = [];
+      for (const w of worlds) {
+        const stat = await fs.stat(path.join(savesDir, w));
+        if (stat.isDirectory()) {
+          worldDirs.push(w);
+        }
+      }
+      result.worlds = worldDirs;
     }
     const modsDir = path.join(minecraftDir, 'mods');
     if (await fs.pathExists(modsDir)) {
