@@ -8,6 +8,24 @@ const extract = require('extract-zip');
 const JavaManager = require('./JavaManager');
 const GPUSettings = require('../utils/GPUSettings');
 const { bt } = require('../localization/backend-translations');
+const VersionList = require('./VersionList');
+const VersionSyncInfo = require('./VersionSyncInfo');
+const VersionMerger = require('./VersionMerger');
+
+// Получаем прокси из переменных окружения
+function getProxyConfig() {
+  const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy ||
+                   process.env.HTTP_PROXY || process.env.http_proxy ||
+                   process.env.PROXY_URL || process.env.proxy_url;
+  if (!proxyUrl) return false;
+  try { return { url: proxyUrl }; } catch (e) { return false; }
+}
+
+// Axios-инстанс с поддержкой прокси из переменных окружения
+const http = axios.create({
+  timeout: 30000,
+  proxy: getProxyConfig(),
+});
 
 class MinecraftLauncher {
   constructor() {
@@ -20,9 +38,11 @@ class MinecraftLauncher {
     this.authlibPath = path.join(this.minecraftDir, 'authlib-injector.jar');
     this.javaManager = new JavaManager();
     this.gpuSettings = new GPUSettings();
-    this.manifestCache = new Map();
-    this.MANIFEST_CACHE_TTL = 5 * 60 * 1000;
     this.DOWNLOAD_CONCURRENCY = 8;
+
+    // Новые модули
+    this.versionList = new VersionList(path.join(this.minecraftDir, 'cache'));
+    this.merger = new VersionMerger(this.versionsDir);
 
     this.initDirectories();
   }
@@ -66,16 +86,6 @@ class MinecraftLauncher {
     await fs.ensureDir(this.instancesDir);
   }
 
-  async getCachedManifest(url) {
-    const cached = this.manifestCache.get(url);
-    if (cached && (Date.now() - cached.timestamp < this.MANIFEST_CACHE_TTL)) {
-      return cached.data;
-    }
-    const response = await axios.get(url);
-    this.manifestCache.set(url, { data: response.data, timestamp: Date.now() });
-    return response.data;
-  }
-
   async downloadWithResume(url, filePath, progressCallback) {
     await fs.ensureDir(path.dirname(filePath));
     let downloadedSize = 0;
@@ -92,7 +102,7 @@ class MinecraftLauncher {
     }
 
     try {
-      const response = await axios({
+      const response = await http({
         method: 'get',
         url: url,
         responseType: 'stream',
@@ -153,28 +163,13 @@ class MinecraftLauncher {
     }
   }
 
-  async downloadBatch(tasks, concurrency) {
-    let completed = 0;
-    const total = tasks.length;
-    const results = [];
-
-    for (let i = 0; i < tasks.length; i += concurrency) {
-      const batch = tasks.slice(i, i + concurrency);
-      const batchResults = await Promise.allSettled(batch.map(task => task()));
-      results.push(...batchResults);
-      completed += batch.length;
-    }
-
-    return results;
-  }
-
   async downloadAuthlibInjector() {
     if (await fs.pathExists(this.authlibPath)) return;
     try {
       console.log('Downloading authlib-injector...');
-      const response = await axios.get('https://authlib-injector.yushi.moe/artifact/latest.json', { timeout: 15000 });
+      const response = await http.get('https://authlib-injector.yushi.moe/artifact/latest.json', { timeout: 15000 });
       const downloadUrl = response.data.download_url;
-      const fileResponse = await axios.get(downloadUrl, { responseType: 'arraybuffer', timeout: 30000 });
+      const fileResponse = await http.get(downloadUrl, { responseType: 'arraybuffer', timeout: 30000 });
       await fs.writeFile(this.authlibPath, fileResponse.data);
       console.log('authlib-injector downloaded');
     } catch (error) {
@@ -186,7 +181,7 @@ class MinecraftLauncher {
     try {
       const profileUrl = `https://meta.fabricmc.net/v2/versions/loader/${mcVersion}/${loaderVersion}/profile/json`;
       progressCallback({ stage: bt('stage_fabric_profile'), progress: 50 });
-      const profileResponse = await axios.get(profileUrl);
+      const profileResponse = await http.get(profileUrl);
       const fabricProfile = profileResponse.data;
       progressCallback({ stage: bt('stage_fabric_libs'), progress: 60 });
       const libraries = fabricProfile.libraries || [];
@@ -334,7 +329,7 @@ class MinecraftLauncher {
       if (!await fs.pathExists(libPath)) {
         try {
           await fs.ensureDir(path.dirname(libPath));
-          const response = await axios.get(optifineUrl, {
+          const response = await http.get(optifineUrl, {
             responseType: 'stream',
             timeout: 120000,
             maxRedirects: 5,
@@ -483,7 +478,7 @@ class MinecraftLauncher {
       try {
         const profileUrl = `https://meta.quiltmc.org/v3/versions/loader/${mcVersion}/${loaderVersion}/profile/json`;
         progressCallback({ stage: bt('stage_installing_quilt'), progress: 35 });
-        const profileResponse = await axios.get(profileUrl, { timeout: 30000 });
+        const profileResponse = await http.get(profileUrl, { timeout: 30000 });
         const quiltProfile = profileResponse.data;
 
         quiltProfile.id = versionId;
@@ -542,94 +537,7 @@ class MinecraftLauncher {
   }
 
   async mergeVersion(json) {
-    let result = { ...json };
-    let current = json;
-    const processedParents = new Set();
-    const allLibraries = [];
-
-    const addLibraries = (versionObj) => {
-      if (versionObj.libraries) {
-        for (const lib of versionObj.libraries) {
-          allLibraries.push(lib);
-        }
-      }
-    };
-
-    addLibraries(current);
-
-    while (current.inheritsFrom && !processedParents.has(current.inheritsFrom)) {
-      const parentId = current.inheritsFrom;
-      processedParents.add(parentId);
-      const parentJsonPath = path.join(this.versionsDir, parentId, `${parentId}.json`);
-      if (!await fs.pathExists(parentJsonPath)) break;
-      const parentJson = await fs.readJson(parentJsonPath);
-      addLibraries(parentJson);
-
-      if (!result.mainClass && parentJson.mainClass) result.mainClass = parentJson.mainClass;
-      if (!result.assetIndex && parentJson.assetIndex) result.assetIndex = parentJson.assetIndex;
-      if (!result.assets && parentJson.assets) result.assets = parentJson.assets;
-      if (!result.javaVersion && parentJson.javaVersion) result.javaVersion = parentJson.javaVersion;
-      if (parentJson.arguments) {
-        if (!result.arguments) {
-          result.arguments = JSON.parse(JSON.stringify(parentJson.arguments));
-        } else {
-          if (parentJson.arguments.jvm) {
-            if (!result.arguments.jvm) {
-              result.arguments.jvm = JSON.parse(JSON.stringify(parentJson.arguments.jvm));
-            } else {
-              const existingJvm = new Set(result.arguments.jvm.filter(a => typeof a === 'string'));
-              for (const jvmArg of parentJson.arguments.jvm) {
-                if (typeof jvmArg === 'string' && !existingJvm.has(jvmArg)) {
-                  result.arguments.jvm.push(jvmArg);
-                } else if (typeof jvmArg === 'object') {
-                  result.arguments.jvm.push(jvmArg);
-                }
-              }
-            }
-          }
-          if (parentJson.arguments.game) {
-            if (!result.arguments.game) {
-              result.arguments.game = JSON.parse(JSON.stringify(parentJson.arguments.game));
-            } else {
-              const existingGame = new Set(result.arguments.game.filter(a => typeof a === 'string'));
-              for (const gameArg of parentJson.arguments.game) {
-                if (typeof gameArg === 'string' && !existingGame.has(gameArg)) {
-                  result.arguments.game.push(gameArg);
-                } else if (typeof gameArg === 'object') {
-                  result.arguments.game.push(gameArg);
-                }
-              }
-            }
-          }
-        }
-      }
-      if (!result.minecraftArguments && parentJson.minecraftArguments) result.minecraftArguments = parentJson.minecraftArguments;
-      if (!result.type && parentJson.type) result.type = parentJson.type;
-
-      current = parentJson;
-    }
-
-    const dedupMap = new Map();
-    for (const lib of allLibraries) {
-      const ga = this.getLibraryGA(lib);
-      if (!ga) {
-        dedupMap.set(JSON.stringify(lib), lib);
-        continue;
-      }
-      const existing = dedupMap.get(ga);
-      if (!existing) {
-        dedupMap.set(ga, lib);
-      } else {
-        const existingVer = this.getLibraryVersion(existing);
-        const newVer = this.getLibraryVersion(lib);
-        if (this.compareVersions(newVer, existingVer) > 0) {
-          dedupMap.set(ga, lib);
-        }
-      }
-    }
-
-    result.libraries = Array.from(dedupMap.values());
-    return result;
+    return this.merger.merge(json);
   }
 
   async resolveVersion(versionId) {
@@ -638,10 +546,10 @@ class MinecraftLauncher {
       throw new Error(`Version ${versionId} not found`);
     }
     const versionJson = await fs.readJson(versionJsonPath);
-    return this.mergeVersion(versionJson);
+    return this.merger.merge(versionJson);
   }
 
-  async downloadMissingLibraries(versionJson) {
+  async downloadMissingLibraries(versionJson, progressCallback = null) {
     const libraries = versionJson.libraries || [];
     const tasks = [];
 
@@ -650,11 +558,22 @@ class MinecraftLauncher {
       let downloadUrl = null;
       let expectedHash = null;
 
-      if (library.downloads && library.downloads.artifact) {
+      // Определяем путь и URL библиотеки
+      if (library.downloads?.artifact) {
         libPath = path.join(this.librariesDir, library.downloads.artifact.path);
         downloadUrl = library.downloads.artifact.url;
         expectedHash = library.downloads.artifact.sha1;
+      } else if (library.downloads?.classifiers) {
+        // Навитивы — определяем подходящие для текущей ОС
+        const nativeKey = this._getNativeKey(library);
+        if (nativeKey && library.downloads.classifiers[nativeKey]) {
+          const classifier = library.downloads.classifiers[nativeKey];
+          libPath = path.join(this.librariesDir, classifier.path);
+          downloadUrl = classifier.url;
+          expectedHash = classifier.sha1;
+        }
       } else if (library.name && library.url) {
+        // Старый формат с URL
         const parts = library.name.split(':');
         if (parts.length >= 3) {
           const [group, artifact, version] = parts;
@@ -664,6 +583,7 @@ class MinecraftLauncher {
           downloadUrl = `${library.url}${groupPath}/${artifact}/${version}/${jarName}`;
         }
       } else if (library.name) {
+        // Maven Central по умолчанию
         const parts = library.name.split(':');
         if (parts.length >= 3) {
           const [group, artifact, version] = parts;
@@ -673,39 +593,47 @@ class MinecraftLauncher {
           downloadUrl = `https://repo1.maven.org/maven2/${groupPath}/${artifact}/${version}/${jarName}`;
         }
       }
-      if (!libPath && library.downloads && library.downloads.classifiers) {
-        const nativeKey = 'natives-windows';
-        if (library.downloads.classifiers[nativeKey]) {
-          libPath = path.join(this.librariesDir, library.downloads.classifiers[nativeKey].path);
-          downloadUrl = library.downloads.classifiers[nativeKey].url;
-        }
-      }
 
       if (libPath && downloadUrl) {
         const currentLibPath = libPath;
         const currentDownloadUrl = downloadUrl;
         const currentHash = expectedHash;
         tasks.push(async () => {
-          const exists = await fs.pathExists(currentLibPath);
-          if (exists && currentHash) {
-            const valid = await this.verifyFileHash(currentLibPath, currentHash);
-            if (valid) return { success: true, skipped: true };
-            await fs.remove(currentLibPath);
-          }
-          if (!exists || !currentHash) {
-            if (await fs.pathExists(currentLibPath)) return { success: true, skipped: true };
-          }
           try {
+            // Проверяем наличие и валидность
+            if (await fs.pathExists(currentLibPath)) {
+              if (currentHash) {
+                const valid = await this.verifyFileHash(currentLibPath, currentHash);
+                if (valid) return { success: true, skipped: true };
+                // Хеш не совпадает — удаляем и скачиваем заново
+                await fs.remove(currentLibPath);
+              } else {
+                return { success: true, skipped: true };
+              }
+            }
+
+            // Скачиваем
             await this.downloadWithResume(currentDownloadUrl, currentLibPath);
+
+            // Проверяем хеш после скачивания
             if (currentHash) {
               const valid = await this.verifyFileHash(currentLibPath, currentHash);
               if (!valid) {
+                console.warn(`Hash mismatch for ${currentLibPath}, retrying...`);
                 await fs.remove(currentLibPath);
                 await this.downloadWithResume(currentDownloadUrl, currentLibPath);
+                // Повторная проверка
+                const valid2 = await this.verifyFileHash(currentLibPath, currentHash);
+                if (!valid2) {
+                  console.error(`Failed to verify hash after retry: ${currentLibPath}`);
+                  return { success: false, error: 'Hash verification failed after retry' };
+                }
               }
             }
+
             return { success: true };
           } catch (e) {
+            console.warn(`Failed to download library ${library.name}: ${e.message}`);
             return { success: false, error: e.message };
           }
         });
@@ -713,18 +641,173 @@ class MinecraftLauncher {
     }
 
     if (tasks.length > 0) {
-      await this.downloadBatch(tasks, this.DOWNLOAD_CONCURRENCY);
+      let completed = 0;
+      const total = tasks.length;
+
+      for (let i = 0; i < tasks.length; i += this.DOWNLOAD_CONCURRENCY) {
+        const batch = tasks.slice(i, i + this.DOWNLOAD_CONCURRENCY);
+        const batchResults = await Promise.allSettled(batch.map(task => task()));
+        completed += batch.length;
+
+        if (progressCallback) {
+          const libProgress = Math.round((completed / total) * 100);
+          progressCallback({
+            stage: bt('stage_downloading_libs_progress', { current: completed, total: total }),
+            progress: 40 + (libProgress * 0.2),
+          });
+        }
+
+        // Собираем ошибки, но не прерываем загрузку
+        const errors = batchResults.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value?.success));
+        if (errors.length > 0) {
+          console.warn(`${errors.length} libraries failed to download (non-critical)`);
+        }
+      }
     }
   }
 
-  async getAvailableVersions() {
-    try {
-      const response = await this.getCachedManifest('https://launchermeta.mojang.com/mc/game/version_manifest.json');
-      return response.versions.filter(v => v.type === 'release');
-    } catch (error) {
-      console.error('Error fetching versions:', error);
-      return [];
+  /**
+   * Определяет ключ навивов для текущей ОС.
+   */
+  _getNativeKey(library) {
+    const currentOS = os.platform();
+    const arch = os.arch();
+
+    if (currentOS === 'win32') {
+      if (arch === 'arm64') return 'natives-windows-arm64';
+      return 'natives-windows';
+    } else if (currentOS === 'darwin') {
+      if (arch === 'arm64') return 'natives-macos-arm64';
+      return 'natives-macos';
+    } else if (currentOS === 'linux') {
+      if (arch === 'arm64') return 'natives-linux-arm64';
+      return 'natives-linux';
     }
+    return 'natives-windows';
+  }
+
+  async getAvailableVersions(includeSnapshots = false, includeOld = false) {
+    let versions = [];
+    try {
+      versions = await this.versionList.getAllVersions();
+    } catch (error) {
+      console.warn('Network unavailable, using cached versions:', error.message);
+      // Если сеть недоступна, пробуем загрузить кэш напрямую
+      try {
+        const cachePath = path.join(this.versionList.cacheDir, 'version_manifest.json');
+        if (await fs.pathExists(cachePath)) {
+          const cached = JSON.parse(await fs.readFile(cachePath, 'utf8'));
+          versions = cached.versions || [];
+        }
+      } catch (e) {
+        console.error('No cached versions available');
+      }
+    }
+
+    let result = versions;
+
+    // Фильтруем невалидные версии (типа "26.2", "1.0-pre" и т.д.)
+    result = result.filter(v => this._isValidMinecraftVersion(v.id));
+
+    if (!includeSnapshots) {
+      result = result.filter(v => v.type === 'release');
+    }
+    if (!includeOld) {
+      result = result.filter(v => !['old_beta', 'old_alpha', 'old_alpha_snapshot'].includes(v.type));
+    }
+
+    // Сортируем: новые версии сверху (по releaseTime, затем по time)
+    result.sort((a, b) => {
+      const timeA = new Date(a.releaseTime || a.time || 0).getTime();
+      const timeB = new Date(b.releaseTime || b.time || 0).getTime();
+      return timeB - timeA;
+    });
+
+    // Добавляем информацию о том, установлена ли версия
+    const installedVersions = await this.getInstalledVersions();
+    const installedSet = new Set(installedVersions);
+    result = result.map(v => ({
+      ...v,
+      isInstalled: installedSet.has(v.id),
+      isLatest: v.id === this.versionList._manifest?.latest?.release,
+      isLatestSnapshot: v.id === this.versionList._manifest?.latest?.snapshot,
+    }));
+
+    return result;
+  }
+
+  /**
+   * Проверяет, является ли версия валидной Minecraft версией.
+   * Отфильтровывает мусор типа "26.2", "1.0-pre" и т.д.
+   */
+  _isValidMinecraftVersion(id) {
+    // Валидные форматы: 1.7.10, 1.8.9, 1.9.4, 1.12.2, 1.16.5, 1.20.1, 1.21.4 и т.д.
+    // Также: 24w34a (снапшоты), 1.21.4-pre и т.д.
+    const regex = /^1\.\d+(\.\d+)?(-[a-zA-Z0-9._-]+)?$/;
+    return regex.test(id);
+  }
+
+  async getLatestReleaseVersion() {
+    try {
+      const latest = await this.versionList.getLatestVersion('release');
+      return latest?.id || null;
+    } catch (error) {
+      console.error('Error fetching latest release:', error);
+      return null;
+    }
+  }
+
+  async getLatestSnapshotVersion() {
+    try {
+      const latest = await this.versionList.getLatestVersion('snapshot');
+      return latest?.id || null;
+    } catch (error) {
+      console.error('Error fetching latest snapshot:', error);
+      return null;
+    }
+  }
+
+  async getVersionSyncInfo(versionId) {
+    try {
+      const localVersion = await this._getLocalVersionInfo(versionId);
+      const remoteVersion = await this._getRemoteVersionInfo(versionId);
+      return new VersionSyncInfo(localVersion, remoteVersion);
+    } catch (error) {
+      console.error(`Error getting sync info for ${versionId}:`, error);
+      return null;
+    }
+  }
+
+  async _getLocalVersionInfo(versionId) {
+    try {
+      const versionJsonPath = path.join(this.versionsDir, versionId, `${versionId}.json`);
+      if (await fs.pathExists(versionJsonPath)) {
+        const json = await fs.readJson(versionJsonPath);
+        return {
+          id: json.id || versionId,
+          time: json.time,
+          releaseTime: json.releaseTime,
+          type: json.type,
+        };
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  async _getRemoteVersionInfo(versionId) {
+    try {
+      const manifest = await this.versionList.getManifest();
+      const versionInfo = manifest.versions.find(v => v.id === versionId);
+      if (versionInfo) {
+        return {
+          id: versionInfo.id,
+          time: versionInfo.time,
+          releaseTime: versionInfo.releaseTime,
+          type: versionInfo.type,
+        };
+      }
+    } catch (e) {}
+    return null;
   }
 
   async isVersionFullyDownloaded(versionId) {
@@ -732,12 +815,67 @@ class MinecraftLauncher {
       const versionDir = path.join(this.versionsDir, versionId);
       const versionJsonPath = path.join(versionDir, `${versionId}.json`);
       const jarPath = path.join(versionDir, `${versionId}.jar`);
+
+      // Проверяем JSON и JAR
       if (!await fs.pathExists(versionJsonPath) || !await fs.pathExists(jarPath)) return false;
+
       const versionJson = await fs.readJson(versionJsonPath);
+
+      // Проверяем ассет-индекс
       if (versionJson.assetIndex) {
         const assetIndexPath = path.join(this.assetsDir, 'indexes', `${versionJson.assetIndex.id}.json`);
         if (!await fs.pathExists(assetIndexPath)) return false;
       }
+
+      // Проверяем ассет-объекты (выборочно, не все — только если их мало)
+      if (versionJson.assetIndex?.url) {
+        try {
+          const assetIndexData = await http.get(versionJson.assetIndex.url);
+          const assets = assetIndexData.data.objects;
+          const assetKeys = Object.keys(assets);
+
+          // Проверяем только первые 100 ассетов для скорости
+          const checkCount = Math.min(100, assetKeys.length);
+          for (let i = 0; i < checkCount; i++) {
+            const key = assetKeys[i];
+            const asset = assets[key];
+            const hash = asset.hash;
+            const hashPrefix = hash.substring(0, 2);
+            const assetPath = path.join(this.assetsDir, 'objects', hashPrefix, hash);
+            if (!await fs.pathExists(assetPath)) return false;
+          }
+        } catch (e) {
+          // Если не удалось загрузить индекс — считаем что ок
+        }
+      }
+
+      // Проверяем библиотеки (выборочно, первые 50)
+      const libraries = versionJson.libraries || [];
+      const checkLibCount = Math.min(50, libraries.length);
+      for (let i = 0; i < checkLibCount; i++) {
+        const lib = libraries[i];
+        let libPath = null;
+
+        if (lib.downloads?.artifact) {
+          libPath = path.join(this.librariesDir, lib.downloads.artifact.path);
+        } else if (lib.downloads?.classifiers) {
+          const nativeKey = this._getNativeKey(lib);
+          if (nativeKey && lib.downloads.classifiers[nativeKey]) {
+            libPath = path.join(this.librariesDir, lib.downloads.classifiers[nativeKey].path);
+          }
+        } else if (lib.name) {
+          const parts = lib.name.split(':');
+          if (parts.length >= 3) {
+            const [group, artifact, version] = parts;
+            const groupPath = group.replace(/\./g, '/');
+            const jarName = `${artifact}-${version}.jar`;
+            libPath = path.join(this.librariesDir, groupPath, artifact, version, jarName);
+          }
+        }
+
+        if (libPath && !await fs.pathExists(libPath)) return false;
+      }
+
       return true;
     } catch (error) {
       return false;
@@ -861,98 +999,83 @@ class MinecraftLauncher {
         return { success: true };
       }
 
-      const versionsManifest = await this.getCachedManifest('https://launchermeta.mojang.com/mc/game/version_manifest.json');
-      const versionInfo = versionsManifest.versions.find(v => v.id === versionId);
-      if (!versionInfo) throw new Error('Version not found');
-      const versionManifest = await axios.get(versionInfo.url);
-      const versionData = versionManifest.data;
+      // Vanilla версия — используем VersionList и улучшенную загрузку
+      progressCallback({ stage: bt('stage_fetching_version_info'), progress: 5 });
+      const versionManifest = await this.versionList.getVersionManifest(versionId);
       const versionDir = path.join(this.versionsDir, versionId);
       await fs.ensureDir(versionDir);
-      await fs.writeJson(path.join(versionDir, `${versionId}.json`), versionData, { spaces: 2 });
-      progressCallback({ stage: bt('stage_downloading_client'), progress: 20 });
+      await fs.writeJson(path.join(versionDir, `${versionId}.json`), versionManifest, { spaces: 2 });
+
+      // Скачиваем client.jar
+      progressCallback({ stage: bt('stage_downloading_client'), progress: 15 });
       const clientJarPath = path.join(versionDir, `${versionId}.jar`);
-      const clientHash = versionData.downloads.client.sha1;
+      const clientHash = versionManifest.downloads?.client?.sha1;
       const clientExists = await fs.pathExists(clientJarPath);
       let clientValid = false;
       if (clientExists && clientHash) {
         clientValid = await this.verifyFileHash(clientJarPath, clientHash);
       }
       if (!clientValid) {
-        await this.downloadWithResume(versionData.downloads.client.url, clientJarPath, (p) => {
+        await this.downloadWithResume(versionManifest.downloads.client.url, clientJarPath, (p) => {
           if (p.percentage) {
-            progressCallback({ stage: bt('stage_downloading_client'), progress: 20 + p.percentage * 0.2 });
+            progressCallback({ stage: bt('stage_downloading_client'), progress: 15 + p.percentage * 0.15 });
           }
         });
         if (clientHash) {
           const valid = await this.verifyFileHash(clientJarPath, clientHash);
           if (!valid) {
             await fs.remove(clientJarPath);
-            await this.downloadWithResume(versionData.downloads.client.url, clientJarPath);
+            await this.downloadWithResume(versionManifest.downloads.client.url, clientJarPath);
           }
         }
       }
-      progressCallback({ stage: bt('stage_downloading_libs'), progress: 40 });
-      const libraries = versionData.libraries || [];
-      const libTasks = [];
-      for (let i = 0; i < libraries.length; i++) {
-        const library = libraries[i];
-        if (library.downloads && library.downloads.artifact) {
-          const artifact = library.downloads.artifact;
-          const libPath = path.join(this.librariesDir, artifact.path);
-          const libUrl = artifact.url;
-          const libHash = artifact.sha1;
-          libTasks.push(async () => {
-            if (await fs.pathExists(libPath)) {
-              if (libHash) {
-                const valid = await this.verifyFileHash(libPath, libHash);
-                if (valid) return { success: true, skipped: true };
-                await fs.remove(libPath);
-              } else {
-                return { success: true, skipped: true };
-              }
-            }
-            try {
-              await this.downloadWithResume(libUrl, libPath);
-              return { success: true };
-            } catch (e) {
-              return { success: false };
-            }
-          });
-        }
+
+      // Скачиваем библиотеки с проверкой правил
+      progressCallback({ stage: bt('stage_downloading_libs'), progress: 30 });
+      try {
+        const resolvedJson = await this.resolveVersion(versionId);
+        await this.downloadMissingLibraries(resolvedJson, progressCallback);
+      } catch (e) {
+        console.warn('Failed to download mod loader libraries:', e.message);
       }
-      let libCompleted = 0;
-      for (let i = 0; i < libTasks.length; i += this.DOWNLOAD_CONCURRENCY) {
-        const batch = libTasks.slice(i, i + this.DOWNLOAD_CONCURRENCY);
-        await Promise.allSettled(batch.map(t => t()));
-        libCompleted += batch.length;
-        progressCallback({ stage: bt('stage_downloading_libs_progress', {current: libCompleted, total: libTasks.length}), progress: 40 + ((libCompleted / libTasks.length) * 20) });
-      }
-      for (const library of libraries) {
-        if (library.downloads && library.downloads.classifiers) {
-          const natives = library.downloads.classifiers;
-          const nativeKey = 'natives-windows';
-          if (natives[nativeKey]) {
-            const nativePath = path.join(this.librariesDir, natives[nativeKey].path);
-            if (!await fs.pathExists(nativePath)) {
-              try {
-                await this.downloadWithResume(natives[nativeKey].url, nativePath);
-              } catch (e) {}
-            }
-          }
-        }
-      }
+
+      // Скачиваем ассеты
       progressCallback({ stage: bt('stage_downloading_assets'), progress: 60 });
-      if (versionData.assetIndex) {
-        const assetIndexUrl = versionData.assetIndex.url;
-        const assetIndexData = await axios.get(assetIndexUrl);
-        const assetIndexId = versionData.assetIndex.id;
+      if (versionManifest.assetIndex) {
+        const assetIndexUrl = versionManifest.assetIndex.url;
+        progressCallback({ stage: bt('stage_downloading_asset_index'), progress: 60 });
+        let assetIndexData;
+        try {
+          const response = await http.get(assetIndexUrl, { timeout: 30000 });
+          assetIndexData = response;
+        } catch (e) {
+          // Фоллбэк — пробуем загрузить через альтернативные CDN
+          console.warn(`Asset index download failed, trying fallbacks...`);
+          try {
+            const fallbackUrl = `https://resources.download.minecraft.net/indexes/${versionManifest.assetIndex.id}.json`;
+            const response = await http.get(fallbackUrl, { timeout: 30000 });
+            assetIndexData = response;
+          } catch (e2) {
+            console.warn(`Fallback also failed, using cached or skipping...`);
+            // Пробуем загрузить из кэша
+            const cachedIndexPath = path.join(this.assetsDir, 'indexes', `${versionManifest.assetIndex.id}.json`);
+            if (await fs.pathExists(cachedIndexPath)) {
+              assetIndexData = { data: await fs.readJson(cachedIndexPath) };
+            } else {
+              throw e2;
+            }
+          }
+        }
+        const assetIndexId = versionManifest.assetIndex.id;
         const indexesDir = path.join(this.assetsDir, 'indexes');
         await fs.ensureDir(indexesDir);
         await fs.writeJson(path.join(indexesDir, `${assetIndexId}.json`), assetIndexData.data, { spaces: 2 });
+
         const assets = assetIndexData.data.objects;
         const assetKeys = Object.keys(assets);
         let assetCount = 0;
         const concurrency = 20;
+
         const downloadAsset = async (key) => {
           const asset = assets[key];
           const hash = asset.hash;
@@ -972,21 +1095,28 @@ class MinecraftLauncher {
             }
           }
           assetCount++;
-          if (assetCount % 50 === 0 || assetCount === assetKeys.length) {
-            progressCallback({ stage: bt('stage_downloading_assets_progress', {current: assetCount, total: assetKeys.length}), progress: 60 + ((assetCount / assetKeys.length) * 30) });
+          if (assetCount % 100 === 0 || assetCount === assetKeys.length) {
+            progressCallback({
+              stage: bt('stage_downloading_assets_progress', { current: assetCount, total: assetKeys.length }),
+              progress: 60 + ((assetCount / assetKeys.length) * 35),
+            });
           }
         };
+
         for (let i = 0; i < assetKeys.length; i += concurrency) {
           const batch = assetKeys.slice(i, i + concurrency);
           await Promise.all(batch.map(key => downloadAsset(key)));
         }
       }
+
+      // Создаём директорию инстанса
       const instanceDir = path.join(this.instancesDir, versionId);
       await fs.ensureDir(instanceDir);
       await fs.ensureDir(path.join(instanceDir, 'saves'));
       await fs.ensureDir(path.join(instanceDir, 'resourcepacks'));
       await fs.ensureDir(path.join(instanceDir, 'screenshots'));
       await fs.ensureDir(path.join(instanceDir, 'logs'));
+
       progressCallback({ stage: bt('stage_complete'), progress: 100 });
       return { success: true };
     } catch (error) {
@@ -1182,7 +1312,7 @@ class MinecraftLauncher {
         params.append('facets', JSON.stringify(facets));
         params.append('limit', '5');
 
-        const response = await axios.get(`https://api.modrinth.com/v2/search?${params.toString()}`, {
+        const response = await http.get(`https://api.modrinth.com/v2/search?${params.toString()}`, {
           headers: { 'User-Agent': 'ECHO-Launcher/1.0.0' },
           timeout: 10000
         });
@@ -1212,7 +1342,7 @@ class MinecraftLauncher {
           versionParams.append('loaders', `["${dep.loader.toLowerCase()}"]`);
         }
 
-        const versionsResponse = await axios.get(
+        const versionsResponse = await http.get(
           `https://api.modrinth.com/v2/project/${project.project_id}/version?${versionParams.toString()}`,
           { headers: { 'User-Agent': 'ECHO-Launcher/1.0.0' }, timeout: 10000 }
         );
@@ -1255,6 +1385,38 @@ class MinecraftLauncher {
 
   async launchGame(config) {
     const { version, username, memory, isolated = false, optimizationProfile = 'balanced', selectedGPU = 0, elyAuth = null, preferredJava = null } = config;
+
+    // Создаём userProperties для Ely.by аккаунтов (в начале, чтобы было доступно везде)
+    let userProperties = {};
+    if (elyAuth && elyAuth.skinUrl) {
+      try {
+        const model = elyAuth.skinModel || 'default';
+        const textureData = {
+          timestamp: Date.now(),
+          profileId: (elyAuth.uuid || '').replace(/-/g, ''),
+          playerName: username,
+          textures: {
+            SKIN: {
+              url: elyAuth.skinUrl,
+              metadata: model === 'slim' ? { model: 'slim' } : undefined
+            }
+          }
+        };
+        if (!textureData.textures.SKIN.metadata) {
+          delete textureData.textures.SKIN.metadata;
+        }
+        const textureValue = Buffer.from(JSON.stringify(textureData)).toString('base64');
+        userProperties = [{
+          name: 'textures',
+          value: textureValue
+        }];
+        console.log(`[Launcher] userProperties создан: textures свойство добавлено, URL=${elyAuth.skinUrl}`);
+      } catch (e) {
+        console.error(`[Launcher] Ошибка создания userProperties:`, e.message);
+      }
+    } else {
+      console.log(`[Launcher] userProperties пустой (нет данных скина)`);
+    }
 
     const versionDir = path.join(this.versionsDir, version);
     const modpackJsonPath = path.join(versionDir, 'modpack.json');
@@ -1311,12 +1473,29 @@ class MinecraftLauncher {
       }
     }
     const skinPath = path.join(this.minecraftDir, 'skin.png');
-    if (!await fs.pathExists(skinPath) && elyAuth && elyAuth.skin) {
+    
+    // Сохраняем скин из данных аккаунта
+    if (!await fs.pathExists(skinPath)) {
       try {
-        const base64Data = elyAuth.skin.replace(/^data:image\/png;base64,/, '');
-        await fs.writeFile(skinPath, base64Data, 'base64');
+        // Проверяем skinUrl (URL строка)
+        if (elyAuth && elyAuth.skinUrl) {
+          console.log(`[Launcher] Загрузка скина по URL: ${elyAuth.skinUrl}`);
+          const response = await axios.get(elyAuth.skinUrl, {
+            responseType: 'arraybuffer',
+            timeout: 10000
+          });
+          await fs.writeFile(skinPath, response.data);
+          console.log(`[Launcher] Скин сохранён: ${skinPath} (${response.data.length} байт)`);
+        }
+        // Проверяем skin как base64 (старый формат)
+        else if (elyAuth && elyAuth.skin && typeof elyAuth.skin === 'string' && elyAuth.skin.startsWith('data:')) {
+          console.log('[Launcher] Сохранение скина из base64 (старый формат)');
+          const base64Data = elyAuth.skin.replace(/^data:image\/png;base64,/, '');
+          await fs.writeFile(skinPath, base64Data, 'base64');
+          console.log(`[Launcher] Скин сохранён из base64: ${skinPath}`);
+        }
       } catch (e) {
-        console.warn('Failed to save skin from account data:', e.message);
+        console.warn('[Launcher] Не удалось сохранить скин:', e.message);
       }
     }
     if (await fs.pathExists(skinPath)) {
@@ -1510,8 +1689,14 @@ class MinecraftLauncher {
 
     for (const arg of versionJvmArgs) {
       if (typeof arg === 'string') {
-        // Строковые аргументы применяются всегда, но мы отфильтруем macOS-специфичные позже
-        loaderJvmArgs.push(arg);
+        // Строковые аргументы применяются всегда; заменяем плейсхолдеры
+        let resolved = arg
+          .replace(/\$\{library_directory\}/g, this.librariesDir)
+          .replace(/\$\{classpath_separator\}/g, path.delimiter)
+          .replace(/\$\{version_name\}/g, version)
+          .replace(/\$\{natives_directory\}/g, nativesDir)
+          .replace(/\$\{user_properties\}/g, JSON.stringify(userProperties));
+        loaderJvmArgs.push(resolved);
       } else if (arg.rules) {
         // Проверяем правила
         let applicable = false;
@@ -1533,7 +1718,7 @@ class MinecraftLauncher {
               .replace(/\$\{classpath_separator\}/g, path.delimiter)
               .replace(/\$\{version_name\}/g, version)
               .replace(/\$\{natives_directory\}/g, nativesDir)
-              .replace(/\$\{user_properties\}/g, '{}');
+              .replace(/\$\{user_properties\}/g, JSON.stringify(userProperties));
             loaderJvmArgs.push(resolved);
           }
         }
@@ -1565,9 +1750,6 @@ class MinecraftLauncher {
       filteredLoaderJvmArgs.push(arg);
     }
     loaderJvmArgs = filteredLoaderJvmArgs;
-
-    // Также удаляем длинные строки, содержащие path.delimiter, которые могут быть classpath
-    loaderJvmArgs = loaderJvmArgs.filter(a => !(a.includes(path.delimiter) && a.length > 500));
 
     // Определяем, есть ли уже -p
     const hasModulePath = loaderJvmArgs.some(a => a === '-p');
@@ -1639,9 +1821,44 @@ class MinecraftLauncher {
     const assetIndexId = resolvedJson.assetIndex?.id || resolvedJson.assets || version.split('-')[0];
     const mainClass = resolvedJson.mainClass;
     if (!mainClass) throw new Error('No main class found');
+    
     const playerUUID = elyAuth && elyAuth.uuid ? elyAuth.uuid.replace(/-/g, '') : this.generateUUID();
     const accessToken = elyAuth && elyAuth.accessToken ? elyAuth.accessToken : 'null';
     const userType = elyAuth ? 'msa' : 'legacy';
+    
+    console.log(`[Launcher] Запуск игры: version=${version}, username=${username}, uuid=${playerUUID}, elyAuth=${!!elyAuth}`);
+    if (elyAuth) {
+      console.log(`[Launcher] Ely.by данные: skinUrl=${elyAuth.skinUrl || 'нет'}, skinModel=${elyAuth.skinModel || 'нет'}`);
+    }
+
+    // Обновляем userProperties если playerUUID доступен (нужен profileId)
+    if (elyAuth && elyAuth.skinUrl && userProperties.length === 0) {
+      try {
+        const model = elyAuth.skinModel || 'default';
+        const textureData = {
+          timestamp: Date.now(),
+          profileId: playerUUID.replace(/-/g, ''),
+          playerName: username,
+          textures: {
+            SKIN: {
+              url: elyAuth.skinUrl,
+              metadata: model === 'slim' ? { model: 'slim' } : undefined
+            }
+          }
+        };
+        if (!textureData.textures.SKIN.metadata) {
+          delete textureData.textures.SKIN.metadata;
+        }
+        const textureValue = Buffer.from(JSON.stringify(textureData)).toString('base64');
+        userProperties = [{
+          name: 'textures',
+          value: textureValue
+        }];
+        console.log(`[Launcher] userProperties создан (поздно): textures свойство добавлено, URL=${elyAuth.skinUrl}`);
+      } catch (e) {
+        console.error(`[Launcher] Ошибка создания userProperties:`, e.message);
+      }
+    }
 
     // Извлекаем game args из version JSON (Forge/NeoForge уже содержат --launchTarget, --fml.* и т.д.)
     let loaderGameArgs = [];
@@ -1651,7 +1868,7 @@ class MinecraftLauncher {
         let resolved = arg
           .replace(/\$\{auth_player_name\}/g, username)
           .replace(/\$\{auth_session\}/g, accessToken)
-          .replace(/\$\{user_properties\}/g, '{}')
+          .replace(/\$\{user_properties\}/g, JSON.stringify(userProperties))
           .replace(/\$\{version_name\}/g, version)
           .replace(/\$\{game_directory\}/g, instanceDir)
           .replace(/\$\{assets_root\}/g, this.assetsDir)

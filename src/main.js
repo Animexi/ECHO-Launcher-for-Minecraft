@@ -53,10 +53,9 @@ function createWelcomeWindow() {
     backgroundColor: '#0a0a0a',
     resizable: false,
     webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      enableRemoteModule: false,
-      preload: path.join(__dirname, 'preload.js')
+      nodeIntegration: true,
+      contextIsolation: false,
+      enableRemoteModule: false
     },
     icon: path.join(__dirname, '../icon.png')
   });
@@ -78,10 +77,9 @@ function createWindow() {
     backgroundColor: '#0a0a0a',
     resizable: false,
     webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      enableRemoteModule: false,
-      preload: path.join(__dirname, 'preload.js')
+      nodeIntegration: true,
+      contextIsolation: false,
+      enableRemoteModule: false
     },
     icon: path.join(__dirname, '../icon.png')
   });
@@ -143,9 +141,37 @@ app.on('before-quit', () => { discordRPC.destroy(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 
 ipcMain.handle('get-versions', async () => await launcher.getAvailableVersions());
+ipcMain.handle('get-available-versions', async (event, includeSnapshots = false) => {
+  try {
+    return await launcher.getAvailableVersions(includeSnapshots);
+  } catch (error) {
+    console.error('Error getting available versions:', error);
+    return [];
+  }
+});
+
 ipcMain.handle('get-all-versions', async () => {
-  const vanilla = await launcher.getAvailableVersions();
-  return await modLoaderAPI.getAllVersions(vanilla);
+  try {
+    const vanilla = await launcher.getAvailableVersions();
+    const allVersions = await modLoaderAPI.getAllVersions(vanilla);
+    return allVersions;
+  } catch (error) {
+    console.error('Error getting all versions:', error);
+    // Возвращаем хотя бы vanilla версии
+    try {
+      const vanilla = await launcher.getAvailableVersions();
+      return {
+        vanilla: vanilla || [],
+        forge: [],
+        fabric: [],
+        optifine: [],
+        neoforge: [],
+        quilt: []
+      };
+    } catch (e) {
+      return { vanilla: [], forge: [], fabric: [], optifine: [], neoforge: [], quilt: [] };
+    }
+  }
 });
 ipcMain.handle('download-version', async (event, version) => {
   return await launcher.downloadMinecraft(version, (progress) => {
@@ -165,13 +191,8 @@ ipcMain.handle('launch-game', async (event, config) => {
     return { success: false, error: error.message };
   }
   if (result.success && result.pid) {
+    const sessionId = await statsManager.recordLaunch(config.version);
     const instanceId = Date.now().toString();
-    let sessionId = null;
-    try {
-      sessionId = await statsManager.recordLaunch(config.version);
-    } catch (e) {
-      console.error('Failed to record launch session:', e.message);
-    }
     runningInstances.set(instanceId, {
       pid: result.pid,
       version: config.version,
@@ -326,14 +347,7 @@ ipcMain.handle('launch-game', async (event, config) => {
       console.log(`Process ${result.pid} exited with code ${code}`);
       discordRPC.clearActivity();
       setGameRunning(false);
-      const instance = runningInstances.get(instanceId);
-      if (instance && instance.sessionId) {
-        try {
-          await statsManager.recordGameEnd(instance.sessionId);
-        } catch (e) {
-          console.error('Failed to record game end:', e.message);
-        }
-      }
+      await statsManager.recordGameEnd(sessionId);
       runningInstances.delete(instanceId);
       mainWindow.webContents.send('instance-stopped', instanceId);
     });
@@ -442,14 +456,7 @@ ipcMain.handle('get-minecraft-files', async () => {
     const savesDir = path.join(minecraftDir, 'saves');
     if (await fs.pathExists(savesDir)) {
       const worlds = await fs.readdir(savesDir);
-      const worldDirs = [];
-      for (const w of worlds) {
-        const stat = await fs.stat(path.join(savesDir, w));
-        if (stat.isDirectory()) {
-          worldDirs.push(w);
-        }
-      }
-      result.worlds = worldDirs;
+      result.worlds = worlds.filter(async (w) => (await fs.stat(path.join(savesDir, w))).isDirectory());
     }
     const modsDir = path.join(minecraftDir, 'mods');
     if (await fs.pathExists(modsDir)) {
@@ -950,10 +957,24 @@ ipcMain.handle('ely-start-oauth', async () => {
   try { const tokens = await elyByAuth.startOAuthFlow(); return { success: true, tokens }; } catch (error) { return { success: false, error: error.message }; }
 });
 ipcMain.handle('ely-login-username-password', async (event, username, password) => {
-  try { const tokens = await elyByAuth.startUsernamePasswordAuth(username, password); return { success: true, tokens }; } catch (error) { return { success: false, error: error.message }; }
+  try {
+    console.log(`[IPC] Ely.by login для: ${username}`);
+    const result = await elyByAuth.startUsernamePasswordAuth(username, password);
+    console.log(`[IPC] Ely.by login успешен: uuid=${result.uuid}, skinUrl=${result.skinUrl || 'нет'}`);
+    return { success: true, tokens: result };
+  } catch (error) {
+    console.error(`[IPC] Ely.by login ошибка: ${error.message}`);
+    return { success: false, error: error.message, requires2FA: error.requires2FA || false };
+  }
 });
 ipcMain.handle('ely-get-account-info', async (event, accessToken) => {
-  try { const accountInfo = await elyByAuth.getAccountInfo(accessToken); return { success: true, accountInfo }; } catch (error) { return { success: false, error: error.message }; }
+  try {
+    const accountInfo = await elyByAuth.getAccountInfo(accessToken);
+    return { success: true, accountInfo };
+  } catch (error) {
+    console.error(`[IPC] Ely.by get-account-info ошибка: ${error.message}`);
+    return { success: false, error: error.message };
+  }
 });
 ipcMain.handle('ely-refresh-token', async (event, refreshToken) => {
   try { const tokens = await elyByAuth.refreshAccessToken(refreshToken); return { success: true, tokens }; } catch (error) { return { success: false, error: error.message }; }
@@ -965,7 +986,14 @@ ipcMain.handle('ely-logout', async (event, accessToken) => {
   try { await elyByAuth.logout(accessToken); return { success: true }; } catch (error) { return { success: false, error: error.message }; }
 });
 ipcMain.handle('ely-authenticate-for-game', async (event, accessToken) => {
-  try { const gameAuth = await elyByAuth.authenticateForGame(accessToken); return { success: true, ...gameAuth }; } catch (error) { return { success: false, error: error.message }; }
+  try {
+    const gameAuth = await elyByAuth.authenticateForGame(accessToken);
+    console.log(`[IPC] Ely.by game auth: uuid=${gameAuth.uuid}, skinUrl=${gameAuth.skinUrl || 'нет'}`);
+    return { success: true, ...gameAuth };
+  } catch (error) {
+    console.error(`[IPC] Ely.by game auth ошибка: ${error.message}`);
+    return { success: false, error: error.message };
+  }
 });
 ipcMain.handle('accounts-get-all', async () => {
   try { return { success: true, accounts: accountManager.getAllAccounts() }; } catch (error) { return { success: false, error: error.message }; }
@@ -1001,6 +1029,78 @@ ipcMain.handle('accounts-update-skin', async (event, accountId, skinData) => {
 });
 ipcMain.handle('accounts-get', async (event, accountId) => {
   try { const account = accountManager.getAccount(accountId); return { success: true, account }; } catch (error) { return { success: false, error: error.message }; }
+});
+
+// Обновление скина с сервера Ely.by
+ipcMain.handle('accounts-update-skin-from-server', async (event, accountId) => {
+  try {
+    const account = accountManager.getAccount(accountId);
+    if (!account) {
+      return { success: false, error: 'Account not found' };
+    }
+    console.log(`[IPC] Обновление скина для аккаунта: ${account.username} (type=${account.type})`);
+    
+    let skinResult;
+    if (account.type === 'ely' && account.accessToken) {
+      // Для Ely.by аккаунтов получаем скин с сервера
+      skinResult = await elyByAuth.updateAccountSkinFromServer(account.username);
+      console.log(`[IPC] Скин обновлён: success=${skinResult.success}, url=${skinResult.skinUrl || 'нет'}`);
+      
+      // Сохраняем скин в аккаунт
+      if (skinResult.success) {
+        await accountManager.updateAccountSkin(accountId, {
+          url: skinResult.skinUrl,
+          model: skinResult.skinModel,
+          capeUrl: skinResult.capeUrl,
+          updatedAt: new Date().toISOString()
+        });
+      }
+    } else {
+      // Для локальных аккаунтов — заглушка
+      console.log(`[IPC] Локальный аккаунт, скин не обновляется`);
+      skinResult = { success: true, skinUrl: null, skinModel: 'default', capeUrl: null };
+    }
+    
+    return { success: true, ...skinResult };
+  } catch (error) {
+    console.error(`[IPC] Ошибка обновления скина: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+});
+
+// Получение URL скина для аккаунта
+ipcMain.handle('accounts-get-skin', async (event, accountId) => {
+  try {
+    const account = accountManager.getAccount(accountId);
+    if (!account) {
+      return { success: false, error: 'Account not found' };
+    }
+    
+    let skinUrl = account.skin?.url || null;
+    let skinModel = account.skin?.model || 'default';
+    
+    // Если скина нет в кэше, пробуем получить с сервера
+    if (!skinUrl && account.type === 'ely' && account.accessToken) {
+      console.log(`[IPC] Кэш скина пуст, запрашиваем с сервера для: ${account.username}`);
+      const skinResult = await elyByAuth.updateAccountSkinFromServer(account.username);
+      if (skinResult.success) {
+        skinUrl = skinResult.skinUrl;
+        skinModel = skinResult.skinModel;
+        await accountManager.updateAccountSkin(accountId, {
+          url: skinUrl,
+          model: skinModel,
+          capeUrl: skinResult.capeUrl,
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }
+    
+    console.log(`[IPC] Skin URL для ${account.username}: ${skinUrl || 'нет'}`);
+    return { success: true, skinUrl, skinModel };
+  } catch (error) {
+    console.error(`[IPC] Ошибка получения скина: ${error.message}`);
+    return { success: false, error: error.message };
+  }
 });
 ipcMain.handle('java-get-all-info', async () => {
   try { const info = await javaManager.getAllJavaInfo(); return { success: true, ...info }; } catch (error) { return { success: false, error: error.message }; }
@@ -1241,10 +1341,65 @@ ipcMain.handle('modrinth-download-shader', async (event, downloadUrl, fileName, 
 
 ipcMain.handle('get-available-minecraft-versions', async () => {
   try {
-    const versions = await minecraftLauncher.getAvailableVersions();
+    // Возвращаем ВСЕ версии из Mojang API (release + snapshot)
+    const versions = await launcher.getAvailableVersions(true, false);
     return { success: true, versions };
   } catch (error) {
+    console.error('Error getting available Minecraft versions:', error);
     return { success: false, error: error.message, versions: [] };
+  }
+});
+
+ipcMain.handle('get-available-snapshot-versions', async () => {
+  try {
+    const versions = await launcher.getAvailableVersions(true, false);
+    return { success: true, versions: versions.filter(v => v.type === 'snapshot') };
+  } catch (error) {
+    console.error('Error getting snapshot versions:', error);
+    return { success: false, error: error.message, versions: [] };
+  }
+});
+
+ipcMain.handle('get-rollback-history', async () => {
+  try {
+    const installed = await launcher.getInstalledVersions();
+    const versions = await launcher.getAvailableVersions(true, false);
+
+    // Находим установленные версии в списке всех версий
+    const rollbackHistory = versions
+      .filter(v => installed.includes(v.id))
+      .sort((a, b) => {
+        const timeA = new Date(a.time || 0).getTime();
+        const timeB = new Date(b.time || 0).getTime();
+        return timeB - timeA;
+      })
+      .slice(0, 20); // Последние 20 установленных версий
+
+    return { success: true, versions: rollbackHistory };
+  } catch (error) {
+    console.error('Error getting rollback history:', error);
+    return { success: false, error: error.message, versions: [] };
+  }
+});
+
+ipcMain.handle('rollback-to-version', async (event, versionId) => {
+  try {
+    // Удаляем текущую версию и скачиваем нужную
+    const fs = require('fs-extra');
+    const os = require('os');
+    const versionDir = path.join(os.homedir(), '.minecraft_custom', 'versions', versionId);
+
+    if (!await fs.pathExists(versionDir)) {
+      // Версия не установлена — скачиваем
+      return await launcher.downloadMinecraft(versionId, (progress) => {
+        if (mainWindow) mainWindow.webContents.send('download-progress', progress);
+      });
+    }
+
+    return { success: true, message: `Версия ${versionId} уже установлена` };
+  } catch (error) {
+    console.error('Rollback error:', error);
+    return { success: false, error: error.message };
   }
 });
 

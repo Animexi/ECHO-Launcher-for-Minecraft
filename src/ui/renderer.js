@@ -24,6 +24,7 @@ let allVersionsData = {
   quilt: []
 };
 let currentFilter = 'vanilla';
+let includeSnapshots = false;
 let runningInstances = [];
 let isolatedVersions = new Set();
 let systemInfo = null;
@@ -346,6 +347,9 @@ async function loadVersions() {
   try {
     installedVersions = await ipcRenderer.invoke('get-installed-versions');
     allVersionsData = await ipcRenderer.invoke('get-all-versions');
+    // Передаём флаг снапшотов в IPC
+    const versionsResult = await ipcRenderer.invoke('get-available-versions', includeSnapshots);
+    allVersionsData.vanilla = versionsResult || [];
     filterByType(currentFilter);
     populateVersionSelect();
   } catch (error) {
@@ -389,7 +393,7 @@ function populateVersionsList() {
     return;
   }
   const displayVersions = currentFilter === 'vanilla'
-    ? availableVersions.filter(v => v.type === 'release')
+    ? availableVersions
     : availableVersions;
   if (displayVersions.length === 0) {
     versionsList.innerHTML = `<div class="loading-spinner">${t('versions_no_versions')}</div>`;
@@ -635,17 +639,34 @@ function setupEventListeners() {
 
   document.querySelectorAll('.filter-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
+      // Пропускаем кнопку снапшотов
+      if (btn.classList.contains('snapshot-toggle')) return;
       document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       const filter = btn.getAttribute('data-filter');
       filterByType(filter);
     });
   });
+
+  // Кнопка переключения снапшотов
+  const snapshotToggle = document.getElementById('snapshotToggle');
+  if (snapshotToggle) {
+    snapshotToggle.addEventListener('click', async () => {
+      includeSnapshots = !includeSnapshots;
+      snapshotToggle.classList.toggle('active', includeSnapshots);
+      snapshotToggle.textContent = includeSnapshots ? 'Снапшоты: ВКЛ' : 'Снапшоты: ВЫКЛ';
+      // Перезагружаем версии с новым флагом снапшотов
+      await loadVersions();
+    });
+  }
 }
 
 function filterByType(type) {
   currentFilter = type;
-  if (type === 'vanilla') availableVersions = allVersionsData.vanilla || [];
+  if (type === 'vanilla') {
+    // Vanilla версии уже отфильтрованы и отсортированы на бэкенде
+    availableVersions = allVersionsData.vanilla || [];
+  }
   else if (type === 'forge') availableVersions = allVersionsData.forge || [];
   else if (type === 'neoforge') availableVersions = allVersionsData.neoforge || [];
   else if (type === 'fabric') availableVersions = allVersionsData.fabric || [];
@@ -764,6 +785,54 @@ async function launchGame() {
       return;
     }
     if (playText) playText.textContent = t('launch_starting');
+    
+    // Для Ely.by аккаунтов загружаем скин перед запуском
+    let elyAuthData = null;
+    if (activeAccount.type === 'ely') {
+      console.log(`[UI] Подготовка Ely.by auth для: ${activeAccount.username}`);
+      
+      // Если скина нет, загружаем с сервера
+      if (!activeAccount.skin && activeAccount.accessToken) {
+        console.log(`[UI] Скин не найден в кэше, загружаем с сервера...`);
+        try {
+          const skinResult = await ipcRenderer.invoke('accounts-update-skin-from-server', activeAccount.id);
+          if (skinResult.success) {
+            console.log(`[UI] Скин загружен перед запуском: ${skinResult.skinUrl || 'нет'}`);
+          }
+        } catch (e) {
+          console.error(`[UI] Ошибка загрузки скина перед запуском: ${e.message}`);
+        }
+      }
+      
+      // Получаем актуальные данные аккаунта
+      const updatedAccountResult = await ipcRenderer.invoke('accounts-get', activeAccount.id);
+      const updatedAccount = updatedAccountResult.success ? updatedAccountResult.account : activeAccount;
+      
+      // Извлекаем URL и модель скина
+      let skinUrl = null;
+      let skinModel = 'default';
+      if (updatedAccount.skin) {
+        if (typeof updatedAccount.skin === 'string') {
+          skinUrl = updatedAccount.skin;
+        } else if (updatedAccount.skin.url) {
+          skinUrl = updatedAccount.skin.url;
+          skinModel = updatedAccount.skin.model || 'default';
+        }
+      }
+      
+      console.log(`[UI] Данные скина для запуска: url=${skinUrl || 'нет'}, model=${skinModel}`);
+      
+      elyAuthData = {
+        accessToken: updatedAccount.accessToken,
+        refreshToken: updatedAccount.refreshToken,
+        expiresAt: updatedAccount.expiresAt,
+        username: updatedAccount.username,
+        uuid: updatedAccount.uuid,
+        skinUrl: skinUrl,
+        skinModel: skinModel
+      };
+    }
+    
     const launchConfig = {
       version: selectedVersion,
       username: activeAccount.username,
@@ -771,14 +840,7 @@ async function launchGame() {
       isolated: isolatedVersions.has(selectedVersion),
       optimizationProfile: currentConfig.optimizationProfile || 'balanced',
       selectedGPU: currentConfig.selectedGPU || 0,
-      elyAuth: activeAccount.type === 'ely' ? {
-        accessToken: activeAccount.accessToken,
-        refreshToken: activeAccount.refreshToken,
-        expiresAt: activeAccount.expiresAt,
-        username: activeAccount.username,
-        uuid: activeAccount.uuid,
-        skin: activeAccount.skin || null
-      } : null,
+      elyAuth: elyAuthData,
       preferredJava: currentConfig.preferredJava
     };
     const result = await ipcRenderer.invoke('launch-game', launchConfig);
@@ -1144,8 +1206,19 @@ async function displayAccounts() {
     const item = document.createElement('div');
     item.className = 'account-item';
     if (account.id === activeAccountId) item.classList.add('active');
-    const avatarHtml = account.skin
-      ? `<img src="${account.skin}" alt="${account.username}">`
+    
+    // Получаем URL скина — может быть строка или объект { url, model }
+    let skinUrl = null;
+    if (account.skin) {
+      if (typeof account.skin === 'string') {
+        skinUrl = account.skin;
+      } else if (account.skin.url) {
+        skinUrl = account.skin.url;
+      }
+    }
+    
+    const avatarHtml = skinUrl
+      ? `<img src="${skinUrl}" alt="${account.username}">`
       : `<svg width="48" height="48" viewBox="0 0 48 48" fill="currentColor">
            <rect width="48" height="48" fill="#2a2a2a"/>
            <path d="M24 8C18.5 8 14 12.5 14 18C14 23.5 18.5 28 24 28C29.5 28 34 23.5 34 18C34 12.5 29.5 8 24 8ZM24 40C17.3 40 11.8 36.8 8 32C8 26 20 22.7 24 22.7C28 22.7 40 26 40 32C36.2 36.8 30.7 40 24 40Z" fill="#666"/>
@@ -1187,12 +1260,42 @@ async function selectAccount(accountId) {
     if (account.type === 'ely') typeBadge.classList.add('ely');
   }
   if (uuidDisplay) uuidDisplay.textContent = `UUID: ${account.uuid}`;
+
+  // Для Ely.by аккаунтов загружаем скин с сервера если его нет
+  if (account.type === 'ely' && account.accessToken && !account.skin) {
+    console.log(`[UI] Загрузка скина для Ely.by аккаунта: ${account.username}`);
+    try {
+      const skinResult = await ipcRenderer.invoke('accounts-update-skin-from-server', accountId);
+      if (skinResult.success && skinResult.skinUrl) {
+        console.log(`[UI] Скин загружен: ${skinResult.skinUrl}`);
+        // Обновляем отображение
+        if (avatarLarge) avatarLarge.innerHTML = `<img src="${skinResult.skinUrl}" alt="${account.username}">`;
+        if (skinPreview) skinPreview.innerHTML = `<img src="${skinResult.skinUrl}" alt="${account.username}">`;
+        // Обновляем список аккаунтов
+        await loadAccountsList();
+      } else {
+        console.log(`[UI] Скин не найден для ${account.username}`);
+      }
+    } catch (error) {
+      console.error(`[UI] Ошибка загрузки скина: ${error.message}`);
+    }
+  }
+
+  // Отображаем скин
+  let skinUrl = null;
+  if (account.skin) {
+    if (typeof account.skin === 'string') {
+      skinUrl = account.skin;
+    } else if (account.skin.url) {
+      skinUrl = account.skin.url;
+    }
+  }
   if (avatarLarge) {
-    if (account.skin) avatarLarge.innerHTML = `<img src="${account.skin}" alt="${account.username}">`;
+    if (skinUrl) avatarLarge.innerHTML = `<img src="${skinUrl}" alt="${account.username}">`;
     else avatarLarge.innerHTML = `<svg width="96" height="96" viewBox="0 0 96 96" fill="currentColor"><rect width="96" height="96" fill="#2a2a2a"/><path d="M48 16C37 16 28 25 28 36C28 47 37 56 48 56C59 56 68 47 68 36C68 25 59 16 48 16ZM48 80C34.7 80 23.5 73.5 16 64C16 52 40 45.3 48 45.3C56 45.3 80 52 80 64C72.5 73.5 61.3 80 48 80Z" fill="#666"/></svg>`;
   }
   if (skinPreview) {
-    if (account.skin) skinPreview.innerHTML = `<img src="${account.skin}" alt="${account.username}">`;
+    if (skinUrl) skinPreview.innerHTML = `<img src="${skinUrl}" alt="${account.username}">`;
     else skinPreview.innerHTML = `<div class="skin-placeholder">${t('accounts_no_skin')}</div>`;
   }
 
@@ -1432,6 +1535,14 @@ async function addElyByAccount() {
     confirmBtn.textContent = t('ely_login_processing');
     try {
       const result = await ipcRenderer.invoke('ely-login-username-password', username, password);
+      if (result.requires2FA) {
+        // Требуется 2FA
+        notify('ely_2fa_required', {}, 'error');
+        // Здесь можно добавить диалог ввода TOTP
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = t('common_login');
+        return;
+      }
       if (result.success && result.tokens) {
         const expiresAt = Date.now() + (result.tokens.expiresIn * 1000);
         const accountData = {
@@ -1439,8 +1550,15 @@ async function addElyByAccount() {
           refreshToken: result.tokens.refreshToken,
           expiresAt: expiresAt,
           username: result.tokens.username || username,
-          uuid: result.tokens.uuid
+          uuid: result.tokens.uuid,
+          // Сохраняем скин если получен
+          skin: result.tokens.skinUrl ? {
+            url: result.tokens.skinUrl,
+            model: result.tokens.skinModel || 'default',
+            updatedAt: new Date().toISOString()
+          } : null
         };
+        console.log(`[UI] Данные аккаунта для сохранения: skinUrl=${accountData.skin?.url || 'нет'}`);
         const addResult = await ipcRenderer.invoke('accounts-add-ely', accountData);
         if (addResult.success) {
           notify('ely_account_add_success', {}, 'success');

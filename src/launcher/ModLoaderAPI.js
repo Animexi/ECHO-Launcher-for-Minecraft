@@ -424,7 +424,7 @@ class ModLoaderAPI {
   async getAllVersions(vanillaVersions) {
     console.log('Fetching all mod loader versions...');
 
-    const [forge, fabric, optifine, neoforge, quilt] = await Promise.all([
+    const results = await Promise.allSettled([
       this.getForgeVersions(),
       this.getFabricVersions(),
       this.getOptiFineVersions(),
@@ -432,10 +432,16 @@ class ModLoaderAPI {
       this.getQuiltVersions()
     ]);
 
+    const forge = results[0].status === 'fulfilled' ? results[0].value : this.getFallbackForgeVersions();
+    const fabric = results[1].status === 'fulfilled' ? results[1].value : this.getFallbackFabricVersions();
+    const optifine = results[2].status === 'fulfilled' ? results[2].value : this.getOptiFineVersions();
+    const neoforge = results[3].status === 'fulfilled' ? results[3].value : this.getFallbackNeoForgeVersions();
+    const quilt = results[4].status === 'fulfilled' ? results[4].value : this.getFallbackQuiltVersions();
+
     console.log(`Loaded: ${forge.length} Forge, ${fabric.length} Fabric, ${optifine.length} OptiFine, ${neoforge.length} NeoForge, ${quilt.length} Quilt versions`);
 
     return {
-      vanilla: vanillaVersions,
+      vanilla: vanillaVersions || [],
       forge: forge,
       fabric: fabric,
       optifine: optifine,
