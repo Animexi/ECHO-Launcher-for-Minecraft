@@ -1,3 +1,32 @@
+/* ============================================================
+   welcome.css — единый стеклянный дизайн
+   ============================================================ */
+
+:root {
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 14px;
+  --fs-md: 15px;
+  --fs-lg: 18px;
+  --fs-xl: 22px;
+  --fs-2xl: 28px;
+
+  /* Единая стеклянная палитра */
+  --accent: #ffffff;
+  --accent-dim: rgba(255, 255, 255, 0.08);
+  --accent-glow: rgba(255, 255, 255, 0.15);
+  --accent-hover: #e5e5e5;
+  --danger: #e8524e;
+  --success: #2ecc71;
+  --bg-0: #08080c;
+  --bg-1: rgba(255, 255, 255, 0.04);
+  --bg-2: rgba(255, 255, 255, 0.06);
+  --bg-3: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.15);
+  --glass-blur: 12px;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -8,7 +37,7 @@
 body {
   font-family: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
   overflow: hidden;
-  background: #0a0a0a;
+  background: var(--bg-0);
   color: #fff;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -52,7 +81,8 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
   background-size: 50px 50px;
   animation: gridMove 20s linear infinite;
@@ -71,10 +101,26 @@ body {
   max-height: 90vh;
   overflow-y: auto;
   background: rgba(10, 10, 10, 0.95);
-  border: 1px solid #1a1a1a;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 60px;
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.welcome-content::-webkit-scrollbar {
+  width: 8px;
+}
+.welcome-content::-webkit-scrollbar-track {
+  background: var(--bg-0);
+}
+.welcome-content::-webkit-scrollbar-thumb {
+  background: var(--bg-3);
+  border-radius: 4px;
+}
+.welcome-content::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
 }
 
 .welcome-step {
@@ -87,8 +133,14 @@ body {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .welcome-logo {
@@ -146,21 +198,24 @@ h3 {
 }
 
 .feature-card {
-  background: rgba(21, 21, 21, 0.8);
-  border: 1px solid #1a1a1a;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 24px;
   text-align: center;
   transition: all 0.3s;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .feature-card:hover {
-  border-color: #2a2a2a;
+  border-color: var(--border-hover);
   transform: translateY(-4px);
+  background: var(--bg-2);
 }
 
 .feature-card svg {
-  color: #2ecc71;
+  color: var(--success);
   margin-bottom: 16px;
 }
 
@@ -189,19 +244,21 @@ h3 {
 }
 
 .requirement-card {
-  background: rgba(21, 21, 21, 0.8);
-  border: 1px solid #1a1a1a;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 20px;
   display: flex;
   align-items: center;
   gap: 20px;
   transition: all 0.3s;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .requirement-card:hover {
-  border-color: #2ecc71;
-  background: rgba(26, 26, 26, 0.9);
+  border-color: var(--success);
+  background: var(--bg-2);
 }
 
 .requirement-icon {
@@ -220,13 +277,11 @@ h3 {
 .requirement-icon.java-8 {
   background: #f39c12;
 }
-
 .requirement-icon.java-17 {
   background: #3498db;
 }
-
 .requirement-icon.java-21 {
-  background: #2ecc71;
+  background: var(--success);
 }
 
 .requirement-info {
@@ -250,13 +305,13 @@ h3 {
   background: rgba(46, 204, 113, 0.1);
   border: 1px solid rgba(46, 204, 113, 0.3);
   border-radius: 2px;
-  color: #2ecc71;
+  color: var(--success);
   font-size: 14px;
 }
 
 .info-box {
-  background: rgba(46, 204, 113, 0.1);
-  border: 1px solid rgba(46, 204, 113, 0.3);
+  background: rgba(46, 204, 113, 0.08);
+  border: 1px solid rgba(46, 204, 113, 0.2);
   border-radius: 4px;
   padding: 16px;
   display: flex;
@@ -266,7 +321,7 @@ h3 {
 }
 
 .info-box svg {
-  color: #2ecc71;
+  color: var(--success);
   flex-shrink: 0;
   margin-top: 2px;
 }
@@ -286,20 +341,24 @@ h3 {
 }
 
 .method-card {
-  background: rgba(21, 21, 21, 0.8);
-  border: 1px solid #1a1a1a;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 24px;
   transition: all 0.3s;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .method-card.featured {
-  border-color: #2ecc71;
+  border-color: var(--success);
   background: rgba(46, 204, 113, 0.05);
 }
 
 .method-card:hover {
   transform: translateY(-4px);
+  border-color: var(--border-hover);
+  background: var(--bg-2);
 }
 
 .method-badge {
@@ -317,7 +376,7 @@ h3 {
 }
 
 .method-badge.ely {
-  background: #2ecc71;
+  background: var(--success);
   color: #0a0a0a;
 }
 
@@ -345,18 +404,19 @@ h3 {
   top: 0;
   width: 24px;
   height: 24px;
-  background: #2a2a2a;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 14px;
   font-weight: 600;
-  color: #2ecc71;
+  color: var(--success);
 }
 
 .instruction-list a {
-  color: #2ecc71;
+  color: var(--success);
   text-decoration: none;
 }
 
@@ -367,7 +427,7 @@ h3 {
 .method-note {
   margin-top: 16px;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-1);
   border-left: 2px solid #666;
   border-radius: 2px;
   font-size: 13px;
@@ -375,7 +435,7 @@ h3 {
 }
 
 .method-note.success {
-  border-left-color: #2ecc71;
+  border-left-color: var(--success);
   background: rgba(46, 204, 113, 0.05);
   color: #ccc;
 }
@@ -400,7 +460,7 @@ h3 {
 .quick-step-number {
   width: 48px;
   height: 48px;
-  background: #2ecc71;
+  background: var(--success);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -446,9 +506,9 @@ h3 {
 }
 
 .welcome-btn.primary {
-  background: #2ecc71;
+  background: var(--success);
   color: #0a0a0a;
-  border: 1px solid #2ecc71;
+  border: 1px solid var(--success);
 }
 
 .welcome-btn.primary:hover {
@@ -460,12 +520,12 @@ h3 {
 .welcome-btn.secondary {
   background: transparent;
   color: #fff;
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--border);
 }
 
 .welcome-btn.secondary:hover {
-  background: #1a1a1a;
-  border-color: #3a3a3a;
+  background: var(--bg-2);
+  border-color: var(--border-hover);
 }
 
 .welcome-btn:active {
@@ -490,7 +550,7 @@ h3 {
   font-size: 72px;
   font-weight: 700;
   margin-bottom: 32px;
-  background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+  background: linear-gradient(135deg, var(--success) 0%, #27ae60 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -519,7 +579,7 @@ h3 {
 
 .lang-card {
   background: linear-gradient(135deg, rgba(30, 30, 30, 0.95) 0%, rgba(20, 20, 20, 0.95) 100%);
-  border: 2px solid #2a2a2a;
+  border: 2px solid var(--border);
   border-radius: 16px;
   padding: 0;
   width: 200px;
@@ -529,6 +589,8 @@ h3 {
   position: relative;
   overflow: hidden;
   font-family: inherit;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .lang-card::before {
@@ -548,13 +610,13 @@ h3 {
 }
 
 .lang-card:hover {
-  border-color: #2ecc71;
+  border-color: var(--success);
   transform: translateY(-8px) scale(1.02);
   box-shadow: 0 12px 40px rgba(46, 204, 113, 0.25);
 }
 
 .lang-card.selected {
-  border-color: #2ecc71;
+  border-color: var(--success);
   background: linear-gradient(135deg, rgba(46, 204, 113, 0.15) 0%, rgba(39, 174, 96, 0.1) 100%);
   box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.2);
 }
@@ -566,7 +628,7 @@ h3 {
   right: 16px;
   width: 32px;
   height: 32px;
-  background: #2ecc71;
+  background: var(--success);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -625,11 +687,11 @@ h3 {
 }
 
 .lang-card:hover .lang-label {
-  color: #2ecc71;
+  color: var(--success);
 }
 
 .lang-card.selected .lang-label {
-  color: #2ecc71;
+  color: var(--success);
 }
 
 .lang-sublabel {
@@ -655,21 +717,4 @@ h3 {
   max-width: 600px;
   margin-left: auto;
   margin-right: auto;
-}
-
-.welcome-content::-webkit-scrollbar {
-  width: 8px;
-}
-
-.welcome-content::-webkit-scrollbar-track {
-  background: #0a0a0a;
-}
-
-.welcome-content::-webkit-scrollbar-thumb {
-  background: #2a2a2a;
-  border-radius: 4px;
-}
-
-.welcome-content::-webkit-scrollbar-thumb:hover {
-  background: #3a3a3a;
 }
