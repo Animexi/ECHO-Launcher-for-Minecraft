@@ -24,7 +24,6 @@
   --bg-3: rgba(255, 255, 255, 0.08);
   --border: rgba(255, 255, 255, 0.08);
   --border-hover: rgba(255, 255, 255, 0.15);
-  --glass-blur: 12px;
 }
 
 * {
@@ -104,8 +103,6 @@ body {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 60px;
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
 
@@ -204,8 +201,6 @@ h3 {
   padding: 24px;
   text-align: center;
   transition: all 0.3s;
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .feature-card:hover {
@@ -252,8 +247,6 @@ h3 {
   align-items: center;
   gap: 20px;
   transition: all 0.3s;
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .requirement-card:hover {
@@ -346,8 +339,6 @@ h3 {
   border-radius: 4px;
   padding: 24px;
   transition: all 0.3s;
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .method-card.featured {
@@ -589,8 +580,6 @@ h3 {
   position: relative;
   overflow: hidden;
   font-family: inherit;
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .lang-card::before {

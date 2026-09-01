@@ -24,7 +24,6 @@ let allVersionsData = {
   quilt: []
 };
 let currentFilter = 'vanilla';
-let includeSnapshots = false;
 let runningInstances = [];
 let isolatedVersions = new Set();
 let systemInfo = null;
@@ -345,24 +344,32 @@ async function killInstance(instanceId) {
 
 async function loadVersions() {
   try {
-    installedVersions = await ipcRenderer.invoke('get-installed-versions');
-    allVersionsData = await ipcRenderer.invoke('get-all-versions');
-    // Передаём флаг снапшотов в IPC
-    const versionsResult = await ipcRenderer.invoke('get-available-versions', includeSnapshots);
-    allVersionsData.vanilla = versionsResult || [];
-    filterByType(currentFilter);
+    // 1. Загружаем установленные версии С информацией об изоляции
+    const installedData = await ipcRenderer.invoke('get-versions-with-isolation');
+    installedVersions = (installedData || []).map(v => typeof v === 'string' ? v : v.version);
+    
+    // 2. Заполняем выпадающий список в playTab — ТОЛЬКО установленные
     populateVersionSelect();
+    
+    // 3. Параллельно загружаем сетевые версии и показываем в versionsTab
+    const [allVers, availVers] = await Promise.all([
+      ipcRenderer.invoke('get-all-versions'),
+      ipcRenderer.invoke('get-available-versions')
+    ]);
+    allVersionsData = allVers || { vanilla: [], forge: [], fabric: [], neoforge: [], quilt: [], optifine: [] };
+    allVersionsData.vanilla = availVers || [];
+    
+    // Показываем сетевые версии в versionsTab (для скачивания)
+    filterByType(currentFilter);
   } catch (error) {
     console.error('Error loading versions:', error);
-    installedVersions = ['1.20.4', '1.19.2'];
-    allVersionsData = {
-      vanilla: [{ id: '1.20.4', type: 'release' }, { id: '1.19.2', type: 'release' }],
-      forge: [], fabric: [], optifine: [], neoforge: [], quilt: []
-    };
-    filterByType(currentFilter);
+    installedVersions = [];
+    allVersionsData = { vanilla: [], forge: [], fabric: [], neoforge: [], quilt: [], optifine: [] };
     populateVersionSelect();
   }
 }
+
+// Удалена — больше не нужна, версии разделены по вкладкам
 
 function populateVersionSelect() {
   const versionSelect = document.getElementById('versionSelect');
@@ -372,6 +379,7 @@ function populateVersionSelect() {
     versionSelect.innerHTML = `<option value="">${t('versions_no_installed')}</option>`;
     return;
   }
+  // ТОЛЬКО установленные версии для запуска
   installedVersions.forEach(version => {
     const option = document.createElement('option');
     option.value = version;
@@ -392,21 +400,16 @@ function populateVersionsList() {
     versionsList.innerHTML = `<div class="loading-spinner">${t('versions_no_versions')}</div>`;
     return;
   }
-  const displayVersions = currentFilter === 'vanilla'
-    ? availableVersions
-    : availableVersions;
-  if (displayVersions.length === 0) {
-    versionsList.innerHTML = `<div class="loading-spinner">${t('versions_no_versions')}</div>`;
-    return;
-  }
   const fragment = document.createDocumentFragment();
-  displayVersions.forEach(version => {
+  availableVersions.forEach(version => {
     const card = document.createElement('div');
     card.className = 'version-card';
     const loaderType = version.loader || 'vanilla';
     card.setAttribute('data-version-type', loaderType);
     const isInstalled = installedVersions.includes(version.id);
+    const isIsolated = isInstalled && isolatedVersions.has(version.id);
     if (isInstalled) card.classList.add('installed');
+    if (isIsolated) card.classList.add('isolated-version');
     let versionName = version.id;
     let versionBadge = loaderType;
     if (version.mcVersion) {
@@ -421,6 +424,7 @@ function populateVersionsList() {
       <div class="version-name">${versionName}</div>
       <div class="version-type ${loaderType}">${versionBadge}</div>
       ${isInstalled ? `<div class="version-status">${t('version_installed_status')}</div>` : `<div class="version-status">${t('version_click_install')}</div>`}
+      ${isIsolated ? `<div class="isolation-badge">${t('play_isolated_folder')}</div>` : ''}
       <div class="version-loader hidden">
         <div class="loader-spinner"></div>
         <span>${t('common_loading')}</span>
@@ -639,41 +643,27 @@ function setupEventListeners() {
 
   document.querySelectorAll('.filter-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
-      // Пропускаем кнопку снапшотов
-      if (btn.classList.contains('snapshot-toggle')) return;
       document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       const filter = btn.getAttribute('data-filter');
       filterByType(filter);
     });
   });
-
-  // Кнопка переключения снапшотов
-  const snapshotToggle = document.getElementById('snapshotToggle');
-  if (snapshotToggle) {
-    snapshotToggle.addEventListener('click', async () => {
-      includeSnapshots = !includeSnapshots;
-      snapshotToggle.classList.toggle('active', includeSnapshots);
-      snapshotToggle.textContent = includeSnapshots ? 'Снапшоты: ВКЛ' : 'Снапшоты: ВЫКЛ';
-      // Перезагружаем версии с новым флагом снапшотов
-      await loadVersions();
-    });
-  }
 }
 
 function filterByType(type) {
   currentFilter = type;
+  let networkVersions = [];
   if (type === 'vanilla') {
-    // Vanilla версии уже отфильтрованы и отсортированы на бэкенде
-    availableVersions = allVersionsData.vanilla || [];
+    networkVersions = allVersionsData.vanilla || [];
   }
-  else if (type === 'forge') availableVersions = allVersionsData.forge || [];
-  else if (type === 'neoforge') availableVersions = allVersionsData.neoforge || [];
-  else if (type === 'fabric') availableVersions = allVersionsData.fabric || [];
-  else if (type === 'quilt') availableVersions = allVersionsData.quilt || [];
-  else if (type === 'optifine') availableVersions = allVersionsData.optifine || [];
+  else if (type === 'forge') networkVersions = allVersionsData.forge || [];
+  else if (type === 'neoforge') networkVersions = allVersionsData.neoforge || [];
+  else if (type === 'fabric') networkVersions = allVersionsData.fabric || [];
+  else if (type === 'quilt') networkVersions = allVersionsData.quilt || [];
+  else if (type === 'optifine') networkVersions = allVersionsData.optifine || [];
   else if (type === 'all') {
-    availableVersions = [
+    networkVersions = [
       ...(allVersionsData.vanilla || []),
       ...(allVersionsData.forge || []),
       ...(allVersionsData.neoforge || []),
@@ -682,6 +672,9 @@ function filterByType(type) {
       ...(allVersionsData.optifine || [])
     ];
   }
+  
+  // versionsTab показывает ТОЛЬКО сетевые версии для скачивания
+  availableVersions = networkVersions;
   populateVersionsList();
 }
 

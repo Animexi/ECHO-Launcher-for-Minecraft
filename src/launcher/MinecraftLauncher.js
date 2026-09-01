@@ -686,7 +686,7 @@ class MinecraftLauncher {
     return 'natives-windows';
   }
 
-  async getAvailableVersions(includeSnapshots = false, includeOld = false) {
+  async getAvailableVersions(includeOld = false) {
     let versions = [];
     try {
       versions = await this.versionList.getAllVersions();
@@ -709,9 +709,8 @@ class MinecraftLauncher {
     // Фильтруем невалидные версии (типа "26.2", "1.0-pre" и т.д.)
     result = result.filter(v => this._isValidMinecraftVersion(v.id));
 
-    if (!includeSnapshots) {
-      result = result.filter(v => v.type === 'release');
-    }
+    // По умолчанию возвращаем только release версии
+    result = result.filter(v => v.type === 'release');
     if (!includeOld) {
       result = result.filter(v => !['old_beta', 'old_alpha', 'old_alpha_snapshot'].includes(v.type));
     }

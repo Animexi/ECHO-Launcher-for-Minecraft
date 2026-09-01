@@ -141,9 +141,9 @@ app.on('before-quit', () => { discordRPC.destroy(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 
 ipcMain.handle('get-versions', async () => await launcher.getAvailableVersions());
-ipcMain.handle('get-available-versions', async (event, includeSnapshots = false) => {
+ipcMain.handle('get-available-versions', async () => {
   try {
-    return await launcher.getAvailableVersions(includeSnapshots);
+    return await launcher.getAvailableVersions();
   } catch (error) {
     console.error('Error getting available versions:', error);
     return [];
@@ -1346,16 +1346,6 @@ ipcMain.handle('get-available-minecraft-versions', async () => {
     return { success: true, versions };
   } catch (error) {
     console.error('Error getting available Minecraft versions:', error);
-    return { success: false, error: error.message, versions: [] };
-  }
-});
-
-ipcMain.handle('get-available-snapshot-versions', async () => {
-  try {
-    const versions = await launcher.getAvailableVersions(true, false);
-    return { success: true, versions: versions.filter(v => v.type === 'snapshot') };
-  } catch (error) {
-    console.error('Error getting snapshot versions:', error);
     return { success: false, error: error.message, versions: [] };
   }
 });
